@@ -1,0 +1,55 @@
+services:
+  traefik:
+    image: traefik:v3.7
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    networks:
+      - lockkeep-network
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://root:password@mongo:27017/
+      ME_CONFIG_BASICAUTH_ENABLED: true
+      ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
+      ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
+    networks:
+      - lockkeep-network
+
+  server:
+    image: lockkeep-server
+    labels:
+      - "traefik.http.routers.lockkeep-server.rule=Host(`lockkeep-server.localhost`)"
+      - "traefik.http.services.lockkeep-server.loadbalancer.server.port=8000"
+    # restart: always
+    # ports:
+    #   - 8000:8000
+    depends_on:
+      - mongo
+    env_file:
+      - .env
+    networks:
+      - lockkeep-network
+
+networks:
+  lockkeep-network:
+    driver: bridge
