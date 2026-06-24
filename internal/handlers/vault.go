@@ -69,7 +69,7 @@ func (h *VaultHandler) VerifyVaultPassword(c *gin.Context) {
 
 	// Constant-time comparison to prevent timing attacks
 	if subtle.ConstantTimeCompare([]byte(user.VerificationHash), []byte(req.VerificationHash)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid master password"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid vault password"})
 		return
 	}
 
@@ -149,7 +149,179 @@ func (h *VaultHandler) CreateCredential(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"credential": credential,
-	})
+	c.JSON(http.StatusOK, credential)
+}
+
+func (h *VaultHandler) GetCredentials(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	credentials, err := h.vaultRepo.FindByTenant(ctx, user.TenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch credentials"})
+		return
+	}
+
+	if credentials == nil {
+		credentials = []domain.Credential{}
+	}
+
+	c.JSON(http.StatusOK, credentials)
+}
+
+type UpdateCredentialRequest struct {
+	Organization      string `json:"organization,omitempty"`
+	SiteURL           string `json:"siteUrl,omitempty"`
+	Identifier        string `json:"identifier,omitempty"`
+	Notes             string `json:"notes,omitempty"`
+	EncryptedPassword string `json:"encryptedPassword,omitempty"`
+	IV                string `json:"iv,omitempty"`
+	Tag               string `json:"tag,omitempty"`
+}
+
+func (h *VaultHandler) UpdateCredential(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	credentialID := c.Param("id")
+	credObjectID, err := bson.ObjectIDFromHex(credentialID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid credential id"})
+		return
+	}
+
+	var req UpdateCredentialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Check for duplicates if org/identifier changed
+	if req.Organization != "" && req.Identifier != "" {
+		isDup, err := h.vaultRepo.FindDuplicate(ctx, user.ID, user.TenantID, req.Organization, req.Identifier, &credObjectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+		if isDup {
+			c.JSON(http.StatusConflict, gin.H{"error": "credential with this organization and identifier already exists"})
+			return
+		}
+	}
+
+	updates := bson.M{}
+	if req.Organization != "" {
+		updates["organization"] = req.Organization
+	}
+	if req.SiteURL != "" {
+		updates["site_url"] = req.SiteURL
+	}
+	if req.Identifier != "" {
+		updates["identifier"] = req.Identifier
+	}
+	if req.Notes != "" {
+		updates["notes"] = req.Notes
+	}
+	if req.EncryptedPassword != "" {
+		updates["encrypted_password"] = req.EncryptedPassword
+	}
+	if req.IV != "" {
+		updates["iv"] = req.IV
+	}
+	if req.Tag != "" {
+		updates["tag"] = req.Tag
+	}
+
+	if err := h.vaultRepo.Update(ctx, credObjectID, user.ID, user.TenantID, updates); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update credential"})
+		return
+	}
+
+	// Fetch updated credential
+	updated, err := h.vaultRepo.FindByID(ctx, credObjectID, user.ID, user.TenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch updated credential"})
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
+}
+
+func (h *VaultHandler) DeleteCredential(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	credentialID := c.Param("id")
+	credObjectID, err := bson.ObjectIDFromHex(credentialID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid credential id"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	if err := h.vaultRepo.Delete(ctx, credObjectID, user.ID, user.TenantID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete credential"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "credential deleted"})
 }

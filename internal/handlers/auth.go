@@ -103,7 +103,8 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": tokens.AccessToken,
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
 		"user": gin.H{
 			"id":                user.ID.Hex(),
 			"email":             user.Email,
@@ -198,7 +199,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
 
 	c.JSON(http.StatusCreated, gin.H{
-		"access_token": tokens.AccessToken,
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
 		"user": gin.H{
 			"id":                user.ID.Hex(),
 			"email":             user.Email,
@@ -240,12 +242,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": tokens.AccessToken,
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
 		"user": gin.H{
 			"id":                user.ID.Hex(),
 			"email":             user.Email,
 			"tenantId":          user.TenantID,
 			"hasMasterPassword": user.VerificationHash != "",
+			"authMethod":        user.AuthMethod,
 		},
 	})
 }

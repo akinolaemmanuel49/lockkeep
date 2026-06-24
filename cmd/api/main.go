@@ -93,6 +93,7 @@ func main() {
 	auth.Use(authMiddleware, tenantMiddleware)
 	{
 		auth.POST("/vault/create", authHandler.SetVerificationHash)
+		auth.PUT("/vault/update", authHandler.SetVerificationHash)
 		auth.GET("/vault/kdfparams", authHandler.GetKDFParams)
 	}
 
@@ -100,7 +101,10 @@ func main() {
 	vault.Use(authMiddleware, tenantMiddleware)
 	{
 		vault.POST("verify", vaultHandler.VerifyVaultPassword)
+		vault.GET("/credentials", vaultHandler.GetCredentials)
 		vault.POST("credential", vaultHandler.CreateCredential)
+		vault.PUT("/credential/:id", vaultHandler.UpdateCredential)
+		vault.DELETE("/credential/:id", vaultHandler.DeleteCredential)
 	}
 
 	port := cfg.Port
