@@ -69,14 +69,14 @@ func (r *UserRepository) FindByOAuth(ctx context.Context, provider, providerID s
 	return &user, nil
 }
 
-func (r *UserRepository) UpdateMasterPassword(ctx context.Context, userID bson.ObjectID, hash string, params domain.KDFParams) error {
+func (r *UserRepository) UpdateVerificationHash(ctx context.Context, userID bson.ObjectID, hash string, params domain.KDFParams) error {
 	_, err := r.collection.UpdateOne(ctx,
 		bson.M{"_id": userID},
 		bson.M{
 			"$set": bson.M{
-				"master_password_hash": hash,
-				"kdf_params":           params,
-				"updated_at":           time.Now(),
+				"verification_hash": hash,
+				"kdf_params":        params,
+				"updated_at":        time.Now(),
 			},
 		},
 	)

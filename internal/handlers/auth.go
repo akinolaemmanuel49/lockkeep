@@ -33,9 +33,9 @@ func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepository, jwt
 // --- OAuth (Auth0) ---
 
 type Auth0UserInfo struct {
-	Sub   string `json:"sub"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
+	Sub      string `json:"sub"`
+	Email    string `json:"email"`
+	Nickname string `json:"nickname"`
 }
 
 func (h *AuthHandler) OAuth(c *gin.Context) {
@@ -60,6 +60,14 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 	}
 
 	if user == nil {
+		// Check if email is available
+		if userInfo.Email == "" {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "A public email address is required to sign in with GitHub",
+			})
+			return
+		}
+
 		// Check for email collision across providers
 		existing, err := h.userRepo.FindByEmail(ctx, userInfo.Email)
 		if err != nil {
@@ -100,7 +108,7 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 			"id":                user.ID.Hex(),
 			"email":             user.Email,
 			"tenantId":          user.TenantID,
-			"hasMasterPassword": user.MasterPasswordHash != "",
+			"hasMasterPassword": user.VerificationHash != "",
 		},
 	})
 }
@@ -237,7 +245,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"id":                user.ID.Hex(),
 			"email":             user.Email,
 			"tenantId":          user.TenantID,
-			"hasMasterPassword": user.MasterPasswordHash != "",
+			"hasMasterPassword": user.VerificationHash != "",
 		},
 	})
 }
@@ -288,6 +296,109 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
+}
+
+type SetVerificationHashRequest struct {
+	VerificationHash string `json:"verification_hash" binding:"required"`
+	KDFParams        struct {
+		Algorithm   string `json:"algorithm"`
+		Salt        string `json:"salt"`
+		Memory      uint32 `json:"memory"`
+		Iterations  uint32 `json:"iterations"`
+		Parallelism uint8  `json:"parallelism"`
+	} `json:"kdf_params" binding:"required"`
+}
+
+func (h *AuthHandler) SetVerificationHash(c *gin.Context) {
+	// Get user ID from JWT ( Gin context set by auth middleware)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req SetVerificationHashRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Update user with verification hash and KDF params
+	verificationHash := req.VerificationHash
+	KDFParams := domain.KDFParams{
+		Algorithm:   req.KDFParams.Algorithm,
+		Salt:        req.KDFParams.Salt,
+		Memory:      req.KDFParams.Memory,
+		Iterations:  req.KDFParams.Iterations,
+		Parallelism: req.KDFParams.Parallelism,
+	}
+
+	if err := h.userRepo.UpdateVerificationHash(ctx, user.ID, verificationHash, KDFParams); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update master password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user": gin.H{
+			"id":                user.ID.Hex(),
+			"email":             user.Email,
+			"tenantId":          user.TenantID,
+			"hasMasterPassword": true,
+		},
+	})
+}
+
+func (h *AuthHandler) GetKDFParams(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	KDFParams := user.KDFParams
+
+	c.JSON(http.StatusOK, gin.H{
+		"algorithm":   KDFParams.Algorithm,
+		"salt":        KDFParams.Salt,
+		"memory":      KDFParams.Memory,
+		"iterations":  KDFParams.Iterations,
+		"parallelism": KDFParams.Parallelism,
+	})
 }
 
 func generateTenantID() string {

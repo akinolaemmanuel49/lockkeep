@@ -11,17 +11,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-type CredentialRepository struct {
+type VaultRepository struct {
 	collection *mongo.Collection
 }
 
-func NewCredentialRepository(db *mongo.Database) *CredentialRepository {
-	return &CredentialRepository{
-		collection: db.Collection("credentials"),
+func NewVaultRepository(db *mongo.Database) *VaultRepository {
+	return &VaultRepository{
+		collection: db.Collection("vault"),
 	}
 }
 
-func (r *CredentialRepository) Create(ctx context.Context, cred *domain.Credential) error {
+func (r *VaultRepository) Create(ctx context.Context, cred *domain.Credential) error {
 	cred.ID = bson.NewObjectID()
 	cred.CreatedAt = time.Now()
 	cred.UpdatedAt = time.Now()
@@ -30,7 +30,23 @@ func (r *CredentialRepository) Create(ctx context.Context, cred *domain.Credenti
 	return err
 }
 
-func (r *CredentialRepository) FindByUser(ctx context.Context, userID bson.ObjectID, tenantID string) ([]domain.Credential, error) {
+func (r *VaultRepository) FindByTenant(ctx context.Context, tenantID string) ([]domain.Credential, error) {
+	cursor, err := r.collection.Find(ctx, bson.M{
+		"tenant_id": tenantID,
+	}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var creds []domain.Credential
+	if err := cursor.All(ctx, &creds); err != nil {
+		return nil, err
+	}
+	return creds, nil
+}
+
+func (r *VaultRepository) FindByUser(ctx context.Context, userID bson.ObjectID, tenantID string) ([]domain.Credential, error) {
 	cursor, err := r.collection.Find(ctx, bson.M{
 		"user_id":   userID,
 		"tenant_id": tenantID,
@@ -47,7 +63,7 @@ func (r *CredentialRepository) FindByUser(ctx context.Context, userID bson.Objec
 	return creds, nil
 }
 
-func (r *CredentialRepository) FindByID(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string) (*domain.Credential, error) {
+func (r *VaultRepository) FindByID(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string) (*domain.Credential, error) {
 	var cred domain.Credential
 	err := r.collection.FindOne(ctx, bson.M{
 		"_id":       id,
@@ -63,7 +79,7 @@ func (r *CredentialRepository) FindByID(ctx context.Context, id bson.ObjectID, u
 	return &cred, nil
 }
 
-func (r *CredentialRepository) Update(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string, updates bson.M) error {
+func (r *VaultRepository) Update(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string, updates bson.M) error {
 	updates["updated_at"] = time.Now()
 	_, err := r.collection.UpdateOne(ctx,
 		bson.M{
@@ -76,7 +92,7 @@ func (r *CredentialRepository) Update(ctx context.Context, id bson.ObjectID, use
 	return err
 }
 
-func (r *CredentialRepository) Delete(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string) error {
+func (r *VaultRepository) Delete(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string) error {
 	_, err := r.collection.DeleteOne(ctx, bson.M{
 		"_id":       id,
 		"user_id":   userID,
@@ -85,7 +101,7 @@ func (r *CredentialRepository) Delete(ctx context.Context, id bson.ObjectID, use
 	return err
 }
 
-func (r *CredentialRepository) FindDuplicate(ctx context.Context, userID bson.ObjectID, tenantID string, org, identifier string, excludeID *bson.ObjectID) (bool, error) {
+func (r *VaultRepository) FindDuplicate(ctx context.Context, userID bson.ObjectID, tenantID string, org, identifier string, excludeID *bson.ObjectID) (bool, error) {
 	filter := bson.M{
 		"user_id":      userID,
 		"tenant_id":    tenantID,
@@ -103,7 +119,7 @@ func (r *CredentialRepository) FindDuplicate(ctx context.Context, userID bson.Ob
 	return count > 0, nil
 }
 
-func (r *CredentialRepository) EnsureIndexes(ctx context.Context) error {
+func (r *VaultRepository) EnsureIndexes(ctx context.Context) error {
 	_, err := r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "user_id", Value: 1},

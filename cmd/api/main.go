@@ -39,13 +39,13 @@ func main() {
 
 	// Repositories
 	userRepo := repository.NewUserRepository(db)
-	credRepo := repository.NewCredentialRepository(db)
+	vaultRepo := repository.NewVaultRepository(db)
 
 	// Ensure indexes
 	if err := userRepo.EnsureIndexes(ctx); err != nil {
 		log.Fatal(err)
 	}
-	if err := credRepo.EnsureIndexes(ctx); err != nil {
+	if err := vaultRepo.EnsureIndexes(ctx); err != nil {
 		log.Fatal(err)
 	}
 
@@ -54,6 +54,10 @@ func main() {
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, jwtManager)
+	vaultHandler := handlers.NewVaultHandler(cfg, userRepo, vaultRepo, jwtManager)
+
+	authMiddleware := middleware.Auth(jwtManager)
+	tenantMiddleware := middleware.TenantIsolation()
 
 	// Router
 	r := gin.Default()
@@ -81,14 +85,22 @@ func main() {
 		api.POST("/auth/login", authHandler.Login)
 		api.POST("/auth/refresh", authHandler.Refresh)
 		api.POST("/auth/logout", authHandler.Logout)
+
 	}
 
 	// Protected routes
-	protected := api.Group("")
-	protected.Use(middleware.Auth(jwtManager))
-	protected.Use(middleware.TenantIsolation())
+	auth := api.Group("/auth")
+	auth.Use(authMiddleware, tenantMiddleware)
 	{
-		// TODO: vault and credential handlers
+		auth.POST("/vault/create", authHandler.SetVerificationHash)
+		auth.GET("/vault/kdfparams", authHandler.GetKDFParams)
+	}
+
+	vault := api.Group("vault")
+	vault.Use(authMiddleware, tenantMiddleware)
+	{
+		vault.POST("verify", vaultHandler.VerifyVaultPassword)
+		vault.POST("credential", vaultHandler.CreateCredential)
 	}
 
 	port := cfg.Port
