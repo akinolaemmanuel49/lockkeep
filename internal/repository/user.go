@@ -42,6 +42,17 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain
 	return &user, nil
 }
 
+func (r *UserRepository) EmailExists(ctx context.Context, email string) (bool, error) {
+	count, err := r.collection.CountDocuments(ctx, bson.M{"email": email})
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return true, nil
+		}
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *UserRepository) FindByID(ctx context.Context, id bson.ObjectID) (*domain.User, error) {
 	var user domain.User
 	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
@@ -96,6 +107,19 @@ func (r *UserRepository) UpdateEmail(ctx context.Context, userID bson.ObjectID, 
 	return err
 }
 
+func (r *UserRepository) UpdatePassword(ctx context.Context, userID bson.ObjectID, passwordHash string) error {
+	_, err := r.collection.UpdateOne(ctx,
+		bson.M{"_id": userID},
+		bson.M{
+			"$set": bson.M{
+				"password_hash": passwordHash,
+				"updated_at":    time.Now(),
+			},
+		},
+	)
+	return err
+}
+
 func (r *UserRepository) EnsureIndexes(ctx context.Context) error {
 	_, err := r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "email", Value: 1}},
@@ -110,7 +134,16 @@ func (r *UserRepository) EnsureIndexes(ctx context.Context) error {
 			{Key: "auth_method", Value: 1},
 			{Key: "auth_provider_id", Value: 1},
 		},
-		Options: options.Index().SetUnique(true).SetSparse(true),
+		Options: options.Index().
+			SetUnique(true).
+			// SetSparse(true),
+			SetPartialFilterExpression(
+				bson.M{
+					"auth_method": bson.M{
+						"$in": []string{"oauth_google", "oauth_github"},
+					},
+				},
+			),
 	})
 	return err
 }

@@ -85,13 +85,14 @@ func main() {
 		api.POST("/auth/login", authHandler.Login)
 		api.POST("/auth/refresh", authHandler.Refresh)
 		api.POST("/auth/logout", authHandler.Logout)
-
 	}
 
 	// Protected routes
 	auth := api.Group("/auth")
 	auth.Use(authMiddleware, tenantMiddleware)
 	{
+		auth.POST("/update/email", authHandler.UpdateEmail)
+		auth.POST("/update/password", authHandler.UpdateAccountPassword)
 		auth.POST("/vault/create", authHandler.SetVerificationHash)
 		auth.PUT("/vault/update", authHandler.SetVerificationHash)
 		auth.GET("/vault/kdfparams", authHandler.GetKDFParams)

@@ -84,7 +84,7 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 			Email:          userInfo.Email,
 			TenantID:       generateTenantID(),
 			AuthMethod:     "oauth_" + provider,
-			AuthProviderID: userInfo.Sub,
+			AuthProviderID: &userInfo.Sub,
 		}
 		if err := h.userRepo.Create(ctx, user); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
@@ -403,6 +403,161 @@ func (h *AuthHandler) GetKDFParams(c *gin.Context) {
 		"iterations":  KDFParams.Iterations,
 		"parallelism": KDFParams.Parallelism,
 	})
+}
+
+type UpdateEmailRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+func (h *AuthHandler) UpdateEmail(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req UpdateEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	if user.AuthMethod != "local" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot edit emails for oauth accounts"})
+		return
+	}
+
+	// Prevent email collision
+	if user.Email == req.Email {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "email unchanged",
+		})
+	}
+
+	ok, err := h.userRepo.EmailExists(ctx, req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred updating email"})
+		return
+	}
+
+	if ok {
+		c.JSON(http.StatusConflict, gin.H{"error": "email already in use"})
+		return
+	}
+
+	if !ok {
+		err = h.userRepo.UpdateEmail(ctx, objectID, req.Email)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred updating email"})
+			return
+		}
+	}
+
+	user, err = h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	tokens, err := h.jwtManager.Generate(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		return
+	}
+
+	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+		"user": gin.H{
+			"id":                user.ID.Hex(),
+			"email":             user.Email,
+			"tenantId":          user.TenantID,
+			"hasMasterPassword": false,
+		},
+	})
+}
+
+type UpdateAccountPasswordRequest struct {
+	CurrentPassword string `json:"currentPassword" binding:"required"`
+	NewPassword     string `json:"newPassword" binding:"required"`
+}
+
+func (h *AuthHandler) UpdateAccountPassword(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req UpdateAccountPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	if user.AuthMethod != "local" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot edit passwords for oauth accounts"})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid password"})
+		return
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	err = h.userRepo.UpdatePassword(ctx, objectID, string(passwordHash))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "password successfully updated"})
 }
 
 func generateTenantID() string {

@@ -12,7 +12,7 @@ type User struct {
 	Email            string        `bson:"email" json:"email"`
 	TenantID         string        `bson:"tenant_id" json:"tenantId"`
 	AuthMethod       string        `bson:"auth_method" json:"authMethod"`    // "oauth_google", "oauth_github", "local"
-	AuthProviderID   string        `bson:"auth_provider_id" json:"-"`        // OAuth sub ID
+	AuthProviderID   *string       `bson:"auth_provider_id" json:"-"`        // OAuth sub ID
 	PasswordHash     string        `bson:"password_hash,omitempty" json:"-"` // For local auth only
 	VerificationHash string        `bson:"verification_hash,omitempty" json:"-"`
 	KDFParams        KDFParams     `bson:"kdf_params,omitempty" json:"-"`

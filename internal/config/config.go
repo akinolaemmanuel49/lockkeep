@@ -24,7 +24,7 @@ func Load() *Config {
 		MongoURI:          getEnv("MONGODB_URI", "mongodb://localhost:27017/lockkeep"),
 		JWTSecret:         []byte(getEnv("JWT_SECRET", "change-me-in-production-min-32-characters-long")),
 		JWTRefreshSecret:  []byte(getEnv("JWT_REFRESH_SECRET", "different-change-me-in-production")),
-		JWTExpiry:         15 * time.Minute,
+		JWTExpiry:         5 * time.Minute,
 		RefreshExpiry:     7 * 24 * time.Hour,
 		Auth0Domain:       getEnv("AUTH0_DOMAIN", ""),
 		Auth0ClientID:     getEnv("AUTH0_CLIENT_ID", ""),
