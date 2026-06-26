@@ -11,6 +11,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+var ErrVaultAlreadyMigrated = errors.New("vault already migrated")
+
 type UserRepository struct {
 	collection *mongo.Collection
 }
@@ -146,4 +148,45 @@ func (r *UserRepository) EnsureIndexes(ctx context.Context) error {
 			),
 	})
 	return err
+}
+
+func (r *UserRepository) UpdateKDF(
+	ctx context.Context,
+	userID bson.ObjectID,
+	expectedVersion uint32,
+	verificationHash string,
+	kdfParams domain.KDFParams,
+) error {
+
+	result, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{
+			"_id":                userID,
+			"kdf_params.version": expectedVersion,
+		},
+		bson.M{
+			"$set": bson.M{
+				"verification_hash":      verificationHash,
+				"kdf_params.algorithm":   kdfParams.Algorithm,
+				"kdf_params.salt":        kdfParams.Salt,
+				"kdf_params.memory":      kdfParams.Memory,
+				"kdf_params.iterations":  kdfParams.Iterations,
+				"kdf_params.parallelism": kdfParams.Parallelism,
+				"updated_at":             time.Now(),
+			},
+			"$inc": bson.M{
+				"kdf_params.version": 1,
+			},
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return ErrVaultAlreadyMigrated
+	}
+
+	return nil
 }

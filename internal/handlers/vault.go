@@ -1,35 +1,37 @@
 package handlers
 
 import (
+	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type VaultHandler struct {
 	cfg        *config.Config
+	client     *mongo.Client
 	userRepo   *repository.UserRepository
 	vaultRepo  *repository.VaultRepository
 	jwtManager *jwt.Manager
 }
 
-func NewVaultHandler(cfg *config.Config, userRepo *repository.UserRepository, vaultRepo *repository.VaultRepository, jwtManager *jwt.Manager) *VaultHandler {
+func NewVaultHandler(cfg *config.Config, client *mongo.Client, userRepo *repository.UserRepository, vaultRepo *repository.VaultRepository, jwtManager *jwt.Manager) *VaultHandler {
 	return &VaultHandler{
 		cfg:        cfg,
+		client:     client,
 		userRepo:   userRepo,
 		vaultRepo:  vaultRepo,
 		jwtManager: jwtManager,
 	}
-}
-
-type VerifyVaultPasswordRequest struct {
-	VerificationHash string `json:"verification_hash" binding:"required"`
 }
 
 func (h *VaultHandler) VerifyVaultPassword(c *gin.Context) {
@@ -45,7 +47,7 @@ func (h *VaultHandler) VerifyVaultPassword(c *gin.Context) {
 		return
 	}
 
-	var req VerifyVaultPasswordRequest
+	var req dto.VerifyVaultPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -90,16 +92,6 @@ func (h *VaultHandler) VerifyVaultPassword(c *gin.Context) {
 	})
 }
 
-type CreateCredentialRequest struct {
-	Organization      string `bson:"organization" json:"organization"`
-	SiteURL           string `bson:"site_url" json:"siteUrl"`
-	Identifier        string `bson:"identifier" json:"identifier"`
-	Notes             string `bson:"notes" json:"notes"`
-	EncryptedPassword string `bson:"encrypted_password" json:"encryptedPassword"`
-	IV                string `bson:"iv" json:"iv"`
-	Tag               string `bson:"tag" json:"tag"`
-}
-
 func (h *VaultHandler) CreateCredential(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -113,7 +105,7 @@ func (h *VaultHandler) CreateCredential(c *gin.Context) {
 		return
 	}
 
-	var req CreateCredentialRequest
+	var req dto.CreateCredentialRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -189,16 +181,6 @@ func (h *VaultHandler) GetCredentials(c *gin.Context) {
 	c.JSON(http.StatusOK, credentials)
 }
 
-type UpdateCredentialRequest struct {
-	Organization      string `json:"organization,omitempty"`
-	SiteURL           string `json:"siteUrl,omitempty"`
-	Identifier        string `json:"identifier,omitempty"`
-	Notes             string `json:"notes,omitempty"`
-	EncryptedPassword string `json:"encryptedPassword,omitempty"`
-	IV                string `json:"iv,omitempty"`
-	Tag               string `json:"tag,omitempty"`
-}
-
 func (h *VaultHandler) UpdateCredential(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -219,7 +201,7 @@ func (h *VaultHandler) UpdateCredential(c *gin.Context) {
 		return
 	}
 
-	var req UpdateCredentialRequest
+	var req dto.UpdateCredentialRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -324,4 +306,115 @@ func (h *VaultHandler) DeleteCredential(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "credential deleted"})
+}
+
+func (h *VaultHandler) MigrateVault(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	objectID, err := bson.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req dto.MigrateVaultRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	user, err := h.userRepo.FindByID(ctx, objectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	KDFParams := domain.KDFParams{
+		Algorithm:   req.KDFParams.Algorithm,
+		Salt:        req.KDFParams.Salt,
+		Memory:      req.KDFParams.Memory,
+		Iterations:  req.KDFParams.Iterations,
+		Parallelism: req.KDFParams.Parallelism,
+	}
+
+	session, err := h.client.StartSession()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to start session",
+		})
+		return
+	}
+	defer session.EndSession(ctx)
+
+	err = session.StartTransaction()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to start transaction",
+		})
+		return
+	}
+
+	err = mongo.WithSession(ctx, session, func(ctx context.Context) error {
+
+		if err := h.userRepo.UpdateKDF(
+			ctx,
+			objectID,
+			req.ExpectedVersion,
+			req.VerificationHash,
+			KDFParams,
+		); err != nil {
+			return err
+		}
+
+		if err := h.vaultRepo.BulkUpdate(
+			ctx,
+			user.ID,
+			user.TenantID,
+			req.VaultUpdates,
+		); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, repository.ErrVaultAlreadyMigrated) {
+			_ = session.AbortTransaction(ctx)
+
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "vault already migrated",
+			})
+			return
+		}
+
+		_ = session.AbortTransaction(ctx)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "migration failed",
+		})
+		return
+	}
+
+	if err := session.CommitTransaction(ctx); err != nil {
+		_ = session.AbortTransaction(ctx)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to commit migration",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "vault migrated",
+	})
 }

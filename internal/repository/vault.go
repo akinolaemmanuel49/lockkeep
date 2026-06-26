@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -89,6 +90,44 @@ func (r *VaultRepository) Update(ctx context.Context, id bson.ObjectID, userID b
 		},
 		bson.M{"$set": updates},
 	)
+	return err
+}
+
+func (r *VaultRepository) BulkUpdate(
+	ctx context.Context,
+	userID bson.ObjectID,
+	tenantID string,
+	updates []dto.VaultUpdate,
+) error {
+
+	models := make([]mongo.WriteModel, 0, len(updates))
+
+	for _, update := range updates {
+		id, err := bson.ObjectIDFromHex(update.ID)
+		if err != nil {
+			return err
+		}
+
+		models = append(models,
+			mongo.NewUpdateOneModel().
+				SetFilter(bson.M{
+					"_id":       id,
+					"user_id":   userID,
+					"tenant_id": tenantID,
+				}).
+				SetUpdate(bson.M{
+					"$set": bson.M{
+						"encrypted_password": update.EncryptedPassword,
+						"iv":                 update.IV,
+						"tag":                update.Tag,
+						"updated_at":         time.Now(),
+					},
+				}),
+		)
+	}
+
+	_, err := r.collection.BulkWrite(ctx, models)
+
 	return err
 }
 

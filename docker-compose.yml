@@ -13,16 +13,74 @@ services:
     networks:
       - lockkeep-network
 
-  mongo:
+  mongo1:
     image: mongo
+    command:
+      - sh
+      - -c
+      - |
+        cp /tmp/mongo-keyfile /etc/mongo-keyfile &&
+        chmod 400 /etc/mongo-keyfile &&
+        exec mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-keyfile
     restart: always
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - 27017:27017
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: password
     networks:
       - lockkeep-network
+    volumes:
+      - ./secrets/mongo-keyfile:/tmp/mongo-keyfile:ro
+      - mongo1:/data/db
+
+  mongo2:
+    image: mongo
+    command:
+      - sh
+      - -c
+      - |
+        cp /tmp/mongo-keyfile /etc/mongo-keyfile &&
+        chmod 400 /etc/mongo-keyfile &&
+        exec mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-keyfile
+    restart: always
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - 27018:27017
+    networks:
+      - lockkeep-network
+    volumes:
+      - ./secrets/mongo-keyfile:/tmp/mongo-keyfile:ro
+      - mongo2:/data/db
+
+  mongo3:
+    image: mongo
+    command:
+      - sh
+      - -c
+      - |
+        cp /tmp/mongo-keyfile /etc/mongo-keyfile &&
+        chmod 400 /etc/mongo-keyfile &&
+        exec mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-keyfile
+    restart: always
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - 27019:27017
+    networks:
+      - lockkeep-network
+    volumes:
+      - ./secrets/mongo-keyfile:/tmp/mongo-keyfile:ro
+      - mongo3:/data/db
 
   mongo-express:
     image: mongo-express
@@ -30,7 +88,8 @@ services:
     ports:
       - 8081:8081
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://root:password@mongo:27017/
+      # ME_CONFIG_MONGODB_URL: mongodb://root:password@mongo:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://root:password@mongo1:27017,mongo2:27017,mongo3:27017/admin?replicaSet=rs0
       ME_CONFIG_BASICAUTH_ENABLED: true
       ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
       ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
@@ -46,7 +105,12 @@ services:
     # ports:
     #   - 8000:8000
     depends_on:
-      - mongo
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
     env_file:
       - .env
     networks:
@@ -55,3 +119,8 @@ services:
 networks:
   lockkeep-network:
     driver: bridge
+
+volumes:
+  mongo1:
+  mongo2:
+  mongo3:

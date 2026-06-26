@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
@@ -13,10 +14,12 @@ import (
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
+	err := godotenv.Load()
+	if err != nil {
 		log.Println("No .env file found")
 	}
 
@@ -24,15 +27,37 @@ func main() {
 
 	// Connect to MongoDB
 	ctx := context.Background()
-	client, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
-	if err != nil {
-		log.Fatal(err)
+	var client *mongo.Client
+	const maxRetries = 30
+
+	clientOpts := options.Client().ApplyURI(cfg.MongoURI).SetServerSelectionTimeout(5 * time.Second)
+
+	for i := 0; i < maxRetries; i++ {
+		client, err = mongo.Connect(clientOpts)
+
+		if err == nil {
+			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+
+			err = client.Ping(pingCtx, readpref.Primary())
+			cancel()
+
+			if err == nil {
+				break
+			}
+
+			_ = client.Disconnect(ctx)
+		}
+
+		log.Printf("Waiting for MongoDB (%d/%d): %v", i+1, maxRetries, err)
+		time.Sleep(2 * time.Second)
 	}
+
+	if err != nil {
+		log.Fatal("unable to connect to MongoDB:", err)
+	}
+
 	defer client.Disconnect(ctx)
 
-	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatal(err)
-	}
 	log.Println("Connected to MongoDB")
 
 	db := client.Database("lockkeep")
@@ -54,7 +79,7 @@ func main() {
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, jwtManager)
-	vaultHandler := handlers.NewVaultHandler(cfg, userRepo, vaultRepo, jwtManager)
+	vaultHandler := handlers.NewVaultHandler(cfg, client, userRepo, vaultRepo, jwtManager)
 
 	authMiddleware := middleware.Auth(jwtManager)
 	tenantMiddleware := middleware.TenantIsolation()
@@ -98,14 +123,15 @@ func main() {
 		auth.GET("/vault/kdfparams", authHandler.GetKDFParams)
 	}
 
-	vault := api.Group("vault")
+	vault := api.Group("/vault")
 	vault.Use(authMiddleware, tenantMiddleware)
 	{
-		vault.POST("verify", vaultHandler.VerifyVaultPassword)
+		vault.POST("/verify", vaultHandler.VerifyVaultPassword)
 		vault.GET("/credentials", vaultHandler.GetCredentials)
-		vault.POST("credential", vaultHandler.CreateCredential)
+		vault.POST("/credential", vaultHandler.CreateCredential)
 		vault.PUT("/credential/:id", vaultHandler.UpdateCredential)
 		vault.DELETE("/credential/:id", vaultHandler.DeleteCredential)
+		vault.POST("/migrate", vaultHandler.MigrateVault)
 	}
 
 	port := cfg.Port

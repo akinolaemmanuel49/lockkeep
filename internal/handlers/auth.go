@@ -9,6 +9,7 @@ import (
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
 	"github.com/gin-gonic/gin"
@@ -31,12 +32,6 @@ func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepository, jwt
 }
 
 // --- OAuth (Auth0) ---
-
-type Auth0UserInfo struct {
-	Sub      string `json:"sub"`
-	Email    string `json:"email"`
-	Nickname string `json:"nickname"`
-}
 
 func (h *AuthHandler) OAuth(c *gin.Context) {
 	accessToken, _ := strings.CutPrefix(c.Request.Header.Get("Authorization"), "Bearer ")
@@ -114,7 +109,7 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 	})
 }
 
-func (h *AuthHandler) getAuth0UserInfo(accessToken string) (*Auth0UserInfo, error) {
+func (h *AuthHandler) getAuth0UserInfo(accessToken string) (*dto.Auth0UserInfo, error) {
 	req, err := http.NewRequest("GET", "https://"+h.cfg.Auth0Domain+"/userinfo", nil)
 	if err != nil {
 		return nil, err
@@ -132,7 +127,7 @@ func (h *AuthHandler) getAuth0UserInfo(accessToken string) (*Auth0UserInfo, erro
 		return nil, errors.New("auth0 userinfo failed: " + string(body))
 	}
 
-	var userInfo Auth0UserInfo
+	var userInfo dto.Auth0UserInfo
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
 		return nil, err
 	}
@@ -141,18 +136,8 @@ func (h *AuthHandler) getAuth0UserInfo(accessToken string) (*Auth0UserInfo, erro
 
 // --- Local Auth ---
 
-type RegisterRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
-}
-
-type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
-}
-
 func (h *AuthHandler) Register(c *gin.Context) {
-	var req RegisterRequest
+	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -211,7 +196,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
-	var req LoginRequest
+	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -302,17 +287,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 
-type SetVerificationHashRequest struct {
-	VerificationHash string `json:"verification_hash" binding:"required"`
-	KDFParams        struct {
-		Algorithm   string `json:"algorithm"`
-		Salt        string `json:"salt"`
-		Memory      uint32 `json:"memory"`
-		Iterations  uint32 `json:"iterations"`
-		Parallelism uint8  `json:"parallelism"`
-	} `json:"kdf_params" binding:"required"`
-}
-
 func (h *AuthHandler) SetVerificationHash(c *gin.Context) {
 	// Get user ID from JWT ( Gin context set by auth middleware)
 	userID, exists := c.Get("userID")
@@ -327,7 +301,7 @@ func (h *AuthHandler) SetVerificationHash(c *gin.Context) {
 		return
 	}
 
-	var req SetVerificationHashRequest
+	var req dto.SetVerificationHashRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -405,10 +379,6 @@ func (h *AuthHandler) GetKDFParams(c *gin.Context) {
 	})
 }
 
-type UpdateEmailRequest struct {
-	Email string `json:"email" binding:"required,email"`
-}
-
 func (h *AuthHandler) UpdateEmail(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -422,7 +392,7 @@ func (h *AuthHandler) UpdateEmail(c *gin.Context) {
 		return
 	}
 
-	var req UpdateEmailRequest
+	var req dto.UpdateEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -500,11 +470,6 @@ func (h *AuthHandler) UpdateEmail(c *gin.Context) {
 	})
 }
 
-type UpdateAccountPasswordRequest struct {
-	CurrentPassword string `json:"currentPassword" binding:"required"`
-	NewPassword     string `json:"newPassword" binding:"required"`
-}
-
 func (h *AuthHandler) UpdateAccountPassword(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -518,7 +483,7 @@ func (h *AuthHandler) UpdateAccountPassword(c *gin.Context) {
 		return
 	}
 
-	var req UpdateAccountPasswordRequest
+	var req dto.UpdateAccountPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
