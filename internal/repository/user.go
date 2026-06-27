@@ -13,13 +13,15 @@ import (
 
 var ErrVaultAlreadyMigrated = errors.New("vault already migrated")
 
+const NAME_USER_COLLECTION = "users"
+
 type UserRepository struct {
 	collection *mongo.Collection
 }
 
 func NewUserRepository(db *mongo.Database) *UserRepository {
 	return &UserRepository{
-		collection: db.Collection("users"),
+		collection: db.Collection(NAME_USER_COLLECTION),
 	}
 }
 
@@ -82,14 +84,13 @@ func (r *UserRepository) FindByOAuth(ctx context.Context, provider, providerID s
 	return &user, nil
 }
 
-func (r *UserRepository) UpdateVerificationHash(ctx context.Context, userID bson.ObjectID, hash string, params domain.KDFParams) error {
+func (r *UserRepository) UpdateVaultMetadata(ctx context.Context, userID bson.ObjectID, vault domain.VaultMetadata) error {
 	_, err := r.collection.UpdateOne(ctx,
 		bson.M{"_id": userID},
 		bson.M{
 			"$set": bson.M{
-				"verification_hash": hash,
-				"kdf_params":        params,
-				"updated_at":        time.Now(),
+				"vault":      vault,
+				"updated_at": time.Now(),
 			},
 		},
 	)
@@ -138,7 +139,6 @@ func (r *UserRepository) EnsureIndexes(ctx context.Context) error {
 		},
 		Options: options.Index().
 			SetUnique(true).
-			// SetSparse(true),
 			SetPartialFilterExpression(
 				bson.M{
 					"auth_method": bson.M{
@@ -161,21 +161,21 @@ func (r *UserRepository) UpdateKDF(
 	result, err := r.collection.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":                userID,
-			"kdf_params.version": expectedVersion,
+			"_id":           userID,
+			"vault.version": expectedVersion,
 		},
 		bson.M{
 			"$set": bson.M{
-				"verification_hash":      verificationHash,
-				"kdf_params.algorithm":   kdfParams.Algorithm,
-				"kdf_params.salt":        kdfParams.Salt,
-				"kdf_params.memory":      kdfParams.Memory,
-				"kdf_params.iterations":  kdfParams.Iterations,
-				"kdf_params.parallelism": kdfParams.Parallelism,
-				"updated_at":             time.Now(),
+				"vault.verification_hash": verificationHash,
+				"vault.kdf.algorithm":     kdfParams.Algorithm,
+				"vault.kdf.salt":          kdfParams.Salt,
+				"vault.kdf.memory":        kdfParams.Memory,
+				"vault.kdf.iterations":    kdfParams.Iterations,
+				"vault.kdf.parallelism":   kdfParams.Parallelism,
+				"updated_at":              time.Now(),
 			},
 			"$inc": bson.M{
-				"kdf_params.version": 1,
+				"vault.version": 1,
 			},
 		},
 	)

@@ -12,26 +12,28 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+const NAME_VAULT_COLLECTION = "vault"
+
 type VaultRepository struct {
 	collection *mongo.Collection
 }
 
 func NewVaultRepository(db *mongo.Database) *VaultRepository {
 	return &VaultRepository{
-		collection: db.Collection("vault"),
+		collection: db.Collection(NAME_VAULT_COLLECTION),
 	}
 }
 
-func (r *VaultRepository) Create(ctx context.Context, cred *domain.Credential) error {
-	cred.ID = bson.NewObjectID()
-	cred.CreatedAt = time.Now()
-	cred.UpdatedAt = time.Now()
+func (r *VaultRepository) Create(ctx context.Context, item *domain.VaultItem) error {
+	item.ID = bson.NewObjectID()
+	item.CreatedAt = time.Now()
+	item.UpdatedAt = time.Now()
 
-	_, err := r.collection.InsertOne(ctx, cred)
+	_, err := r.collection.InsertOne(ctx, item)
 	return err
 }
 
-func (r *VaultRepository) FindByTenant(ctx context.Context, tenantID string) ([]domain.Credential, error) {
+func (r *VaultRepository) FindByTenant(ctx context.Context, tenantID string) ([]domain.VaultItem, error) {
 	cursor, err := r.collection.Find(ctx, bson.M{
 		"tenant_id": tenantID,
 	}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
@@ -40,14 +42,14 @@ func (r *VaultRepository) FindByTenant(ctx context.Context, tenantID string) ([]
 	}
 	defer cursor.Close(ctx)
 
-	var creds []domain.Credential
-	if err := cursor.All(ctx, &creds); err != nil {
+	var items []domain.VaultItem
+	if err := cursor.All(ctx, &items); err != nil {
 		return nil, err
 	}
-	return creds, nil
+	return items, nil
 }
 
-func (r *VaultRepository) FindByUser(ctx context.Context, userID bson.ObjectID, tenantID string) ([]domain.Credential, error) {
+func (r *VaultRepository) FindByUser(ctx context.Context, userID bson.ObjectID, tenantID string) ([]domain.VaultItem, error) {
 	cursor, err := r.collection.Find(ctx, bson.M{
 		"user_id":   userID,
 		"tenant_id": tenantID,
@@ -57,27 +59,27 @@ func (r *VaultRepository) FindByUser(ctx context.Context, userID bson.ObjectID, 
 	}
 	defer cursor.Close(ctx)
 
-	var creds []domain.Credential
-	if err := cursor.All(ctx, &creds); err != nil {
+	var items []domain.VaultItem
+	if err := cursor.All(ctx, &items); err != nil {
 		return nil, err
 	}
-	return creds, nil
+	return items, nil
 }
 
-func (r *VaultRepository) FindByID(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string) (*domain.Credential, error) {
-	var cred domain.Credential
+func (r *VaultRepository) FindByID(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string) (*domain.VaultItem, error) {
+	var item domain.VaultItem
 	err := r.collection.FindOne(ctx, bson.M{
 		"_id":       id,
 		"user_id":   userID,
 		"tenant_id": tenantID,
-	}).Decode(&cred)
+	}).Decode(&item)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &cred, nil
+	return &item, nil
 }
 
 func (r *VaultRepository) Update(ctx context.Context, id bson.ObjectID, userID bson.ObjectID, tenantID string, updates bson.M) error {
@@ -97,7 +99,7 @@ func (r *VaultRepository) BulkUpdate(
 	ctx context.Context,
 	userID bson.ObjectID,
 	tenantID string,
-	updates []dto.VaultUpdate,
+	updates []dto.VaultItemUpdate,
 ) error {
 
 	models := make([]mongo.WriteModel, 0, len(updates))
@@ -117,17 +119,17 @@ func (r *VaultRepository) BulkUpdate(
 				}).
 				SetUpdate(bson.M{
 					"$set": bson.M{
-						"encrypted_password": update.EncryptedPassword,
-						"iv":                 update.IV,
-						"tag":                update.Tag,
-						"updated_at":         time.Now(),
+						"secret.ciphertext": update.Secret.Ciphertext,
+						"secret.iv":         update.Secret.IV,
+						"secret.tag":        update.Secret.Tag,
+						"secret.version":    update.Secret.Version,
+						"updated_at":        time.Now(),
 					},
 				}),
 		)
 	}
 
 	_, err := r.collection.BulkWrite(ctx, models)
-
 	return err
 }
 
@@ -140,12 +142,12 @@ func (r *VaultRepository) Delete(ctx context.Context, id bson.ObjectID, userID b
 	return err
 }
 
-func (r *VaultRepository) FindDuplicate(ctx context.Context, userID bson.ObjectID, tenantID string, org, identifier string, excludeID *bson.ObjectID) (bool, error) {
+func (r *VaultRepository) FindDuplicate(ctx context.Context, userID bson.ObjectID, tenantID string, name string, itemType domain.VaultItemType, excludeID *bson.ObjectID) (bool, error) {
 	filter := bson.M{
-		"user_id":      userID,
-		"tenant_id":    tenantID,
-		"organization": org,
-		"identifier":   identifier,
+		"user_id":   userID,
+		"tenant_id": tenantID,
+		"name":      name,
+		"type":      itemType,
 	}
 	if excludeID != nil {
 		filter["_id"] = bson.M{"$ne": *excludeID}
@@ -163,8 +165,8 @@ func (r *VaultRepository) EnsureIndexes(ctx context.Context) error {
 		Keys: bson.D{
 			{Key: "user_id", Value: 1},
 			{Key: "tenant_id", Value: 1},
-			{Key: "organization", Value: 1},
-			{Key: "identifier", Value: 1},
+			{Key: "name", Value: 1},
+			{Key: "type", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	})

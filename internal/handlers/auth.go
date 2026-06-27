@@ -1,140 +1,48 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
-	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
-	cfg        *config.Config
-	userRepo   *repository.UserRepository
-	jwtManager *jwt.Manager
+	authService *service.AuthService
 }
 
-func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepository, jwtManager *jwt.Manager) *AuthHandler {
-	return &AuthHandler{
-		cfg:        cfg,
-		userRepo:   userRepo,
-		jwtManager: jwtManager,
-	}
+func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+	return &AuthHandler{authService: authService}
 }
-
-// --- OAuth (Auth0) ---
 
 func (h *AuthHandler) OAuth(c *gin.Context) {
 	accessToken, _ := strings.CutPrefix(c.Request.Header.Get("Authorization"), "Bearer ")
 
-	// Get user info from Auth0
-	userInfo, err := h.getAuth0UserInfo(accessToken)
+	tokens, user, err := h.authService.OAuth(c.Request.Context(), accessToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
+		switch {
+		case errors.Is(err, service.ErrOAuthEmailRequired):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrEmailExists):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
+		}
 		return
 	}
 
-	provider := extractProvider(userInfo.Sub)
-
-	ctx := c.Request.Context()
-
-	// Check if user exists
-	user, err := h.userRepo.FindByOAuth(ctx, provider, userInfo.Sub)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-
-	if user == nil {
-		// Check if email is available
-		if userInfo.Email == "" {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{
-				"error": "A public email address is required to sign in with GitHub",
-			})
-			return
-		}
-
-		// Check for email collision across providers
-		existing, err := h.userRepo.FindByEmail(ctx, userInfo.Email)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-			return
-		}
-		if existing != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "An account with this email already exists. Please sign in instead."})
-			return
-		}
-
-		// Create new user
-		user = &domain.User{
-			Email:          userInfo.Email,
-			TenantID:       generateTenantID(),
-			AuthMethod:     "oauth_" + provider,
-			AuthProviderID: &userInfo.Sub,
-		}
-		if err := h.userRepo.Create(ctx, user); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
-			return
-		}
-	}
-
-	// Generate tokens
-	tokens, err := h.jwtManager.Generate(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
-		return
-	}
-
-	// Set refresh token as httpOnly cookie
 	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokens.AccessToken,
 		"refresh_token": tokens.RefreshToken,
-		"user": gin.H{
-			"id":                user.ID.Hex(),
-			"email":             user.Email,
-			"tenantId":          user.TenantID,
-			"hasMasterPassword": user.VerificationHash != "",
-		},
+		"user":          user,
 	})
 }
-
-func (h *AuthHandler) getAuth0UserInfo(accessToken string) (*dto.Auth0UserInfo, error) {
-	req, err := http.NewRequest("GET", "https://"+h.cfg.Auth0Domain+"/userinfo", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, errors.New("auth0 userinfo failed: " + string(body))
-	}
-
-	var userInfo dto.Auth0UserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, err
-	}
-	return &userInfo, nil
-}
-
-// --- Local Auth ---
 
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req dto.RegisterRequest
@@ -143,41 +51,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	// Check for existing email
-	existing, err := h.userRepo.FindByEmail(ctx, req.Email)
+	tokens, user, err := h.authService.Register(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if existing != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "An account with this email already exists. Please sign in instead."})
-		return
-	}
-
-	// Hash password
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
-	}
-
-	user := &domain.User{
-		Email:        req.Email,
-		TenantID:     generateTenantID(),
-		AuthMethod:   "local",
-		PasswordHash: string(passwordHash),
-	}
-
-	if err := h.userRepo.Create(ctx, user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
-		return
-	}
-
-	tokens, err := h.jwtManager.Generate(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		if errors.Is(err, service.ErrEmailExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -186,12 +66,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"access_token":  tokens.AccessToken,
 		"refresh_token": tokens.RefreshToken,
-		"user": gin.H{
-			"id":                user.ID.Hex(),
-			"email":             user.Email,
-			"tenantId":          user.TenantID,
-			"hasMasterPassword": false,
-		},
+		"user":          user,
 	})
 }
 
@@ -202,25 +77,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByEmail(ctx, req.Email)
+	tokens, user, err := h.authService.Login(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil || user.AuthMethod != "local" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		return
-	}
-
-	tokens, err := h.jwtManager.Generate(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -229,13 +92,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokens.AccessToken,
 		"refresh_token": tokens.RefreshToken,
-		"user": gin.H{
-			"id":                user.ID.Hex(),
-			"email":             user.Email,
-			"tenantId":          user.TenantID,
-			"hasMasterPassword": user.VerificationHash != "",
-			"authMethod":        user.AuthMethod,
-		},
+		"user":          user,
 	})
 }
 
@@ -246,32 +103,9 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	userID, err := h.jwtManager.ValidateRefresh(refreshToken)
+	tokens, err := h.authService.Refresh(c.Request.Context(), refreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
-		return
-	}
-
-	ctx := c.Request.Context()
-	objectID, err := h.jwtManager.ParseUserID(userID)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
-		return
-	}
-
-	user, err := h.userRepo.FindByID(ctx, objectID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-		return
-	}
-
-	tokens, err := h.jwtManager.Generate(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
 		return
 	}
 
@@ -288,7 +122,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 func (h *AuthHandler) SetVerificationHash(c *gin.Context) {
-	// Get user ID from JWT ( Gin context set by auth middleware)
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -307,40 +140,17 @@ func (h *AuthHandler) SetVerificationHash(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	user, err := h.authService.SetVerificationHash(c.Request.Context(), objectID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	// Update user with verification hash and KDF params
-	verificationHash := req.VerificationHash
-	KDFParams := domain.KDFParams{
-		Algorithm:   req.KDFParams.Algorithm,
-		Salt:        req.KDFParams.Salt,
-		Memory:      req.KDFParams.Memory,
-		Iterations:  req.KDFParams.Iterations,
-		Parallelism: req.KDFParams.Parallelism,
-	}
-
-	if err := h.userRepo.UpdateVerificationHash(ctx, user.ID, verificationHash, KDFParams); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update master password"})
+		if errors.Is(err, service.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user": gin.H{
-			"id":                user.ID.Hex(),
-			"email":             user.Email,
-			"tenantId":          user.TenantID,
-			"hasMasterPassword": true,
-		},
-	})
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
 func (h *AuthHandler) GetKDFParams(c *gin.Context) {
@@ -356,26 +166,22 @@ func (h *AuthHandler) GetKDFParams(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	kdf, err := h.authService.GetKDFParams(c.Request.Context(), objectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		if errors.Is(err, service.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	KDFParams := user.KDFParams
 
 	c.JSON(http.StatusOK, gin.H{
-		"algorithm":   KDFParams.Algorithm,
-		"salt":        KDFParams.Salt,
-		"memory":      KDFParams.Memory,
-		"iterations":  KDFParams.Iterations,
-		"parallelism": KDFParams.Parallelism,
+		"algorithm":   kdf.Algorithm,
+		"salt":        kdf.Salt,
+		"memory":      kdf.Memory,
+		"iterations":  kdf.Iterations,
+		"parallelism": kdf.Parallelism,
 	})
 }
 
@@ -398,61 +204,18 @@ func (h *AuthHandler) UpdateEmail(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	tokens, user, err := h.authService.UpdateEmail(c.Request.Context(), objectID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	if user.AuthMethod != "local" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot edit emails for oauth accounts"})
-		return
-	}
-
-	// Prevent email collision
-	if user.Email == req.Email {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "email unchanged",
-		})
-	}
-
-	ok, err := h.userRepo.EmailExists(ctx, req.Email)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred updating email"})
-		return
-	}
-
-	if ok {
-		c.JSON(http.StatusConflict, gin.H{"error": "email already in use"})
-		return
-	}
-
-	if !ok {
-		err = h.userRepo.UpdateEmail(ctx, objectID, req.Email)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred updating email"})
-			return
+		switch {
+		case errors.Is(err, service.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrCannotEditOAuth):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrEmailInUse):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
-	}
-
-	user, err = h.userRepo.FindByID(ctx, objectID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	tokens, err := h.jwtManager.Generate(user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
 		return
 	}
 
@@ -461,12 +224,7 @@ func (h *AuthHandler) UpdateEmail(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokens.AccessToken,
 		"refresh_token": tokens.RefreshToken,
-		"user": gin.H{
-			"id":                user.ID.Hex(),
-			"email":             user.Email,
-			"tenantId":          user.TenantID,
-			"hasMasterPassword": false,
-		},
+		"user":          user,
 	})
 }
 
@@ -489,55 +247,19 @@ func (h *AuthHandler) UpdateAccountPassword(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	if user.AuthMethod != "local" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot edit passwords for oauth accounts"})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid password"})
-		return
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
-	}
-
-	err = h.userRepo.UpdatePassword(ctx, objectID, string(passwordHash))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+	if err := h.authService.UpdateAccountPassword(c.Request.Context(), objectID, req); err != nil {
+		switch {
+		case errors.Is(err, service.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrCannotEditOAuth):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrInvalidPassword):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password successfully updated"})
-}
-
-func generateTenantID() string {
-	return "tenant_" + bson.NewObjectID().Hex()[:8]
-}
-
-func extractProvider(sub string) string {
-	if strings.HasPrefix(sub, "google-oauth2|") {
-		return "google"
-	}
-	if strings.HasPrefix(sub, "github|") {
-		return "github"
-	}
-	if strings.HasPrefix(sub, "auth0|") {
-		return "local" // Auth0 database connection
-	}
-	return "oauth"
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -65,6 +66,7 @@ func main() {
 	// Repositories
 	userRepo := repository.NewUserRepository(db)
 	vaultRepo := repository.NewVaultRepository(db)
+	cryptoPolicyRepo := repository.NewCryptoPolicyRepository(db)
 
 	// Ensure indexes
 	if err := userRepo.EnsureIndexes(ctx); err != nil {
@@ -77,9 +79,15 @@ func main() {
 	// JWT
 	jwtManager := jwt.NewManager(cfg.JWTSecret, cfg.JWTRefreshSecret, cfg.JWTExpiry, cfg.RefreshExpiry)
 
-	// Handlers
-	authHandler := handlers.NewAuthHandler(cfg, userRepo, jwtManager)
-	vaultHandler := handlers.NewVaultHandler(cfg, client, userRepo, vaultRepo, jwtManager)
+	// Services — NEW LAYER between repos and handlers
+	authService := service.NewAuthService(cfg, userRepo, cryptoPolicyRepo, jwtManager)
+	vaultService := service.NewVaultService(client, userRepo, cryptoPolicyRepo, vaultRepo)
+	cryptoPolicyService := service.NewCryptoPolicyService(cryptoPolicyRepo)
+
+	// Handlers — now depend on services, not repos directly
+	authHandler := handlers.NewAuthHandler(authService)
+	vaultHandler := handlers.NewVaultHandler(vaultService)
+	cryptoPolicyHandler := handlers.NewCryptoPolicyHandler(cryptoPolicyService)
 
 	authMiddleware := middleware.Auth(jwtManager)
 	tenantMiddleware := middleware.TenantIsolation()
@@ -127,11 +135,19 @@ func main() {
 	vault.Use(authMiddleware, tenantMiddleware)
 	{
 		vault.POST("/verify", vaultHandler.VerifyVaultPassword)
-		vault.GET("/credentials", vaultHandler.GetCredentials)
-		vault.POST("/credential", vaultHandler.CreateCredential)
-		vault.PUT("/credential/:id", vaultHandler.UpdateCredential)
-		vault.DELETE("/credential/:id", vaultHandler.DeleteCredential)
+		vault.GET("/items", vaultHandler.GetVaultItems)
+		vault.POST("/item", vaultHandler.CreateVaultItem)
+		vault.PUT("/item/:id", vaultHandler.UpdateVaultItem)
+		vault.DELETE("/item/:id", vaultHandler.DeleteVaultItem)
 		vault.POST("/migrate", vaultHandler.MigrateVault)
+	}
+
+	// Crypto policy routes (admin-only in production)
+	policy := api.Group("/crypto-policy")
+	policy.Use(authMiddleware, tenantMiddleware)
+	{
+		policy.GET("/current", cryptoPolicyHandler.GetCurrentPolicy)
+		policy.POST("/current", cryptoPolicyHandler.SetCurrentPolicy)
 	}
 
 	port := cfg.Port

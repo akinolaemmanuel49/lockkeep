@@ -1,36 +1,31 @@
 package dto
 
-type VaultUpdate struct {
-	ID                string `json:"id" binding:"required"`
-	Organization      string `json:"organization" binding:"required"`
-	SiteURL           string `json:"siteUrl" binding:"required"`
-	Identifier        string `json:"identifier" binding:"required"`
-	Notes             string `json:"notes,omitempty"`
-	EncryptedPassword string `json:"encryptedPassword" binding:"required"`
-	IV                string `json:"iv" binding:"required"`
-	Tag               string `json:"tag" binding:"required"`
-}
-type MigrateVaultRequest struct {
-	ExpectedVersion  uint32 `json:"expected_version" binding:"required"`
-	VerificationHash string `json:"verification_hash" binding:"required"`
-	KDFParams        struct {
-		Algorithm   string `json:"algorithm"`
-		Salt        string `json:"salt"`
-		Memory      uint32 `json:"memory"`
-		Iterations  uint32 `json:"iterations"`
-		Parallelism uint8  `json:"parallelism"`
-	} `json:"kdf_params" binding:"required"`
-	VaultUpdates []VaultUpdate `json:"vault_updates" binding:"required"`
+type VaultItemUpdate struct {
+	ID     string        `json:"id" binding:"required"`
+	Type   VaultItemType `json:"type" binding:"required"`
+	Name   string        `json:"name" binding:"required"`
+	Secret SecretDTO     `json:"secret" binding:"required"`
 }
 
-type UpdateCredentialRequest struct {
-	Organization      string `json:"organization" binding:"required"`
-	SiteURL           string `json:"siteUrl" binding:"required"`
-	Identifier        string `json:"identifier" binding:"required"`
-	Notes             string `json:"notes,omitempty"`
-	EncryptedPassword string `json:"encryptedPassword" binding:"required"`
-	IV                string `json:"iv" binding:"required"`
-	Tag               string `json:"tag" binding:"required"`
+type MigrateVaultRequest struct {
+	ExpectedVersion  uint32            `json:"expected_version" binding:"required"`
+	VerificationHash string            `json:"verification_hash" binding:"required"`
+	KDFParams        KDFDTO            `json:"kdf_params" binding:"required"`
+	VaultUpdates     []VaultItemUpdate `json:"vault_updates" binding:"required"`
+}
+
+type CreateVaultItemRequest struct {
+	Type     VaultItemType  `json:"type" binding:"required"`
+	Name     string         `json:"name" binding:"required"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+	Secret   SecretDTO      `json:"secret" binding:"required"`
+}
+
+type UpdateVaultItemRequest struct {
+	Type     VaultItemType  `json:"type" binding:"required"`
+	Name     string         `json:"name" binding:"required"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+	Secret   SecretDTO      `json:"secret" binding:"required"`
 }
 
 type UpdateAccountPasswordRequest struct {
@@ -44,13 +39,7 @@ type UpdateEmailRequest struct {
 
 type SetVerificationHashRequest struct {
 	VerificationHash string `json:"verification_hash" binding:"required"`
-	KDFParams        struct {
-		Algorithm   string `json:"algorithm"`
-		Salt        string `json:"salt"`
-		Memory      uint32 `json:"memory"`
-		Iterations  uint32 `json:"iterations"`
-		Parallelism uint8  `json:"parallelism"`
-	} `json:"kdf_params" binding:"required"`
+	KDFParams        KDFDTO `json:"kdf_params" binding:"required"`
 }
 
 type RegisterRequest struct {
@@ -63,16 +52,32 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-type CreateCredentialRequest struct {
-	Organization      string `bson:"organization" json:"organization"`
-	SiteURL           string `bson:"site_url" json:"siteUrl"`
-	Identifier        string `bson:"identifier" json:"identifier"`
-	Notes             string `bson:"notes" json:"notes"`
-	EncryptedPassword string `bson:"encrypted_password" json:"encryptedPassword"`
-	IV                string `bson:"iv" json:"iv"`
-	Tag               string `bson:"tag" json:"tag"`
-}
-
 type VerifyVaultPasswordRequest struct {
 	VerificationHash string `json:"verification_hash" binding:"required"`
 }
+
+type SecretDTO struct {
+	Ciphertext string `json:"ciphertext" binding:"required"`
+	IV         string `json:"iv" binding:"required"`
+	Tag        string `json:"tag" binding:"required"`
+	Version    uint32 `json:"version,omitempty"`
+}
+
+type KDFDTO struct {
+	Algorithm   string `json:"algorithm"`
+	Salt        string `json:"salt"`
+	Memory      uint32 `json:"memory"`
+	Iterations  uint32 `json:"iterations"`
+	Parallelism uint8  `json:"parallelism"`
+}
+
+type VaultItemType string
+
+const (
+	ItemLogin       VaultItemType = "login"
+	ItemEnvironment VaultItemType = "environment"
+	ItemSSHKey      VaultItemType = "ssh_key"
+	ItemSecureNote  VaultItemType = "secure_note"
+	ItemCard        VaultItemType = "payment_card"
+	ItemAPIKey      VaultItemType = "api_key"
+)

@@ -1,37 +1,21 @@
 package handlers
 
 import (
-	"context"
-	"crypto/subtle"
 	"errors"
 	"net/http"
 
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
-	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type VaultHandler struct {
-	cfg        *config.Config
-	client     *mongo.Client
-	userRepo   *repository.UserRepository
-	vaultRepo  *repository.VaultRepository
-	jwtManager *jwt.Manager
+	vaultService *service.VaultService
 }
 
-func NewVaultHandler(cfg *config.Config, client *mongo.Client, userRepo *repository.UserRepository, vaultRepo *repository.VaultRepository, jwtManager *jwt.Manager) *VaultHandler {
-	return &VaultHandler{
-		cfg:        cfg,
-		client:     client,
-		userRepo:   userRepo,
-		vaultRepo:  vaultRepo,
-		jwtManager: jwtManager,
-	}
+func NewVaultHandler(vaultService *service.VaultService) *VaultHandler {
+	return &VaultHandler{vaultService: vaultService}
 }
 
 func (h *VaultHandler) VerifyVaultPassword(c *gin.Context) {
@@ -53,46 +37,26 @@ func (h *VaultHandler) VerifyVaultPassword(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	items, err := h.vaultService.VerifyVaultPassword(c.Request.Context(), objectID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		switch {
+		case errors.Is(err, service.ErrVaultNotSet):
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrInvalidVaultPassword):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	if user.VerificationHash == "" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "vault password not set"})
-		return
-	}
-
-	// Constant-time comparison to prevent timing attacks
-	if subtle.ConstantTimeCompare([]byte(user.VerificationHash), []byte(req.VerificationHash)) != 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid vault password"})
-		return
-	}
-
-	// Fetch credentials for this user
-	credentials, err := h.vaultRepo.FindByTenant(ctx, user.TenantID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch credentials"})
-		return
-	}
-
-	if credentials == nil {
-		credentials = []domain.Credential{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
-		"credentials": credentials,
+		"credentials": items,
 	})
 }
 
-func (h *VaultHandler) CreateCredential(c *gin.Context) {
+func (h *VaultHandler) CreateVaultItem(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -105,46 +69,22 @@ func (h *VaultHandler) CreateCredential(c *gin.Context) {
 		return
 	}
 
-	var req dto.CreateCredentialRequest
+	var req dto.CreateVaultItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	item, err := h.vaultService.CreateVaultItem(c.Request.Context(), objectID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	credential := &domain.Credential{
-		ID:                bson.NewObjectID(),
-		UserID:            user.ID,
-		TenantID:          user.TenantID,
-		Organization:      req.Organization,
-		SiteURL:           req.SiteURL,
-		Identifier:        req.Identifier,
-		Notes:             req.Notes,
-		EncryptedPassword: req.EncryptedPassword,
-		IV:                req.IV,
-		Tag:               req.Tag,
-	}
-
-	err = h.vaultRepo.Create(ctx, credential)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create credential"})
-		return
-	}
-
-	c.JSON(http.StatusOK, credential)
+	c.JSON(http.StatusOK, item)
 }
 
-func (h *VaultHandler) GetCredentials(c *gin.Context) {
+func (h *VaultHandler) GetVaultItems(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -157,31 +97,16 @@ func (h *VaultHandler) GetCredentials(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	items, err := h.vaultService.GetVaultItems(c.Request.Context(), objectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	credentials, err := h.vaultRepo.FindByTenant(ctx, user.TenantID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch credentials"})
-		return
-	}
-
-	if credentials == nil {
-		credentials = []domain.Credential{}
-	}
-
-	c.JSON(http.StatusOK, credentials)
+	c.JSON(http.StatusOK, items)
 }
 
-func (h *VaultHandler) UpdateCredential(c *gin.Context) {
+func (h *VaultHandler) UpdateVaultItem(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -194,82 +119,36 @@ func (h *VaultHandler) UpdateCredential(c *gin.Context) {
 		return
 	}
 
-	credentialID := c.Param("id")
-	credObjectID, err := bson.ObjectIDFromHex(credentialID)
+	itemID := c.Param("id")
+	itemObjectID, err := bson.ObjectIDFromHex(itemID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid credential id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item id"})
 		return
 	}
 
-	var req dto.UpdateCredentialRequest
+	var req dto.UpdateVaultItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
+	updated, err := h.vaultService.UpdateVaultItem(c.Request.Context(), objectID, itemObjectID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	// Check for duplicates if org/identifier changed
-	if req.Organization != "" && req.Identifier != "" {
-		isDup, err := h.vaultRepo.FindDuplicate(ctx, user.ID, user.TenantID, req.Organization, req.Identifier, &credObjectID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-			return
+		switch {
+		case errors.Is(err, service.ErrDuplicateItem):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
-		if isDup {
-			c.JSON(http.StatusConflict, gin.H{"error": "credential with this organization and identifier already exists"})
-			return
-		}
-	}
-
-	updates := bson.M{}
-	if req.Organization != "" {
-		updates["organization"] = req.Organization
-	}
-	if req.SiteURL != "" {
-		updates["site_url"] = req.SiteURL
-	}
-	if req.Identifier != "" {
-		updates["identifier"] = req.Identifier
-	}
-	if req.Notes != "" {
-		updates["notes"] = req.Notes
-	}
-	if req.EncryptedPassword != "" {
-		updates["encrypted_password"] = req.EncryptedPassword
-	}
-	if req.IV != "" {
-		updates["iv"] = req.IV
-	}
-	if req.Tag != "" {
-		updates["tag"] = req.Tag
-	}
-
-	if err := h.vaultRepo.Update(ctx, credObjectID, user.ID, user.TenantID, updates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update credential"})
-		return
-	}
-
-	// Fetch updated credential
-	updated, err := h.vaultRepo.FindByID(ctx, credObjectID, user.ID, user.TenantID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch updated credential"})
 		return
 	}
 
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *VaultHandler) DeleteCredential(c *gin.Context) {
+func (h *VaultHandler) DeleteVaultItem(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -282,30 +161,19 @@ func (h *VaultHandler) DeleteCredential(c *gin.Context) {
 		return
 	}
 
-	credentialID := c.Param("id")
-	credObjectID, err := bson.ObjectIDFromHex(credentialID)
+	itemID := c.Param("id")
+	itemObjectID, err := bson.ObjectIDFromHex(itemID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid credential id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item id"})
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+	if err := h.vaultService.DeleteVaultItem(c.Request.Context(), objectID, itemObjectID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := h.vaultRepo.Delete(ctx, credObjectID, user.ID, user.TenantID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete credential"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "credential deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "vault item deleted"})
 }
 
 func (h *VaultHandler) MigrateVault(c *gin.Context) {
@@ -327,94 +195,17 @@ func (h *VaultHandler) MigrateVault(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	user, err := h.userRepo.FindByID(ctx, objectID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-
-	KDFParams := domain.KDFParams{
-		Algorithm:   req.KDFParams.Algorithm,
-		Salt:        req.KDFParams.Salt,
-		Memory:      req.KDFParams.Memory,
-		Iterations:  req.KDFParams.Iterations,
-		Parallelism: req.KDFParams.Parallelism,
-	}
-
-	session, err := h.client.StartSession()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to start session",
-		})
-		return
-	}
-	defer session.EndSession(ctx)
-
-	err = session.StartTransaction()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to start transaction",
-		})
-		return
-	}
-
-	err = mongo.WithSession(ctx, session, func(ctx context.Context) error {
-
-		if err := h.userRepo.UpdateKDF(
-			ctx,
-			objectID,
-			req.ExpectedVersion,
-			req.VerificationHash,
-			KDFParams,
-		); err != nil {
-			return err
+	if err := h.vaultService.MigrateVault(c.Request.Context(), objectID, req); err != nil {
+		switch {
+		case errors.Is(err, service.ErrMigrationConflict):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "migration failed"})
 		}
-
-		if err := h.vaultRepo.BulkUpdate(
-			ctx,
-			user.ID,
-			user.TenantID,
-			req.VaultUpdates,
-		); err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		if errors.Is(err, repository.ErrVaultAlreadyMigrated) {
-			_ = session.AbortTransaction(ctx)
-
-			c.JSON(http.StatusConflict, gin.H{
-				"error": "vault already migrated",
-			})
-			return
-		}
-
-		_ = session.AbortTransaction(ctx)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "migration failed",
-		})
 		return
 	}
 
-	if err := session.CommitTransaction(ctx); err != nil {
-		_ = session.AbortTransaction(ctx)
-
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to commit migration",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "vault migrated",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "vault migrated"})
 }
