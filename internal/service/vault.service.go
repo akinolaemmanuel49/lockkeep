@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
@@ -119,7 +120,13 @@ func (s *VaultService) GetVaultItems(ctx context.Context, userID bson.ObjectID) 
 	return items, nil
 }
 
-func (s *VaultService) UpdateVaultItem(ctx context.Context, userID bson.ObjectID, itemID bson.ObjectID, req dto.UpdateVaultItemRequest) (*domain.VaultItem, error) {
+func (s *VaultService) UpdateVaultItem(
+	ctx context.Context,
+	userID bson.ObjectID,
+	itemID bson.ObjectID,
+	req dto.UpdateVaultItemRequest,
+	updatePolicy string,
+) (*domain.VaultItem, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -157,8 +164,18 @@ func (s *VaultService) UpdateVaultItem(ctx context.Context, userID bson.ObjectID
 	if req.Secret.Tag != "" {
 		updates["secret.tag"] = req.Secret.Tag
 	}
-	if req.Secret.Version > 0 {
-		updates["secret.version"] = req.Secret.Version
+
+	if updatePolicy == "true" {
+		if req.Secret.Ciphertext == "" {
+			return nil, errors.New("policy update requires secret re-encryption")
+		}
+
+		currentPolicy, err := s.cryptoPolicyRepo.GetCurrent(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch current crypto policy: %w", err)
+		}
+
+		updates["secret.version"] = currentPolicy.Version
 	}
 
 	if err := s.vaultRepo.Update(ctx, itemID, user.ID, user.TenantID, updates); err != nil {

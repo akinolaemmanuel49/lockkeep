@@ -107,6 +107,8 @@ func (h *VaultHandler) GetVaultItems(c *gin.Context) {
 }
 
 func (h *VaultHandler) UpdateVaultItem(c *gin.Context) {
+	updatePolicy := c.Query("updatePolicy")
+
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -132,7 +134,7 @@ func (h *VaultHandler) UpdateVaultItem(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.vaultService.UpdateVaultItem(c.Request.Context(), objectID, itemObjectID, req)
+	updated, err := h.vaultService.UpdateVaultItem(c.Request.Context(), objectID, itemObjectID, req, updatePolicy)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrDuplicateItem):

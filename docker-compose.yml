@@ -99,11 +99,11 @@ services:
   server:
     image: lockkeep-server
     labels:
-      - "traefik.http.routers.lockkeep-server.rule=Host(`lockkeep-server.localhost`)"
+      - "traefik.http.routers.lockkeep-server.rule=Host(`api.lockkeep.localhost`)"
       - "traefik.http.services.lockkeep-server.loadbalancer.server.port=8000"
     # restart: always
-    # ports:
-    #   - 8000:8000
+    ports:
+      - 8000:8000
     depends_on:
       mongo1:
         condition: service_healthy
@@ -118,7 +118,7 @@ services:
 
 networks:
   lockkeep-network:
-    driver: bridge
+    external: true
 
 volumes:
   mongo1:

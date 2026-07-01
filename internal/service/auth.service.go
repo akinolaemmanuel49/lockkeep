@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -225,8 +226,13 @@ func (s *AuthService) SetVerificationHash(ctx context.Context, userID bson.Objec
 		return nil, ErrUserNotFound
 	}
 
+	currentPolicy, err := s.cryptoPolicyRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch current crypto policy: %w", err)
+	}
+
 	vault := domain.VaultMetadata{
-		Version:          1,
+		Version:          currentPolicy.Version,
 		VerificationHash: req.VerificationHash,
 		KDF: domain.KDFParams{
 			Algorithm:   req.KDFParams.Algorithm,
@@ -357,6 +363,7 @@ func (s *AuthService) toUserResponse(user *domain.User) *dto.UserResponse {
 		TenantID:          user.TenantID,
 		HasMasterPassword: hasMasterPassword,
 		AuthMethod:        user.AuthMethod,
+		Vault:             user.Vault,
 	}
 }
 

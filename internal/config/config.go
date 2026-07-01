@@ -2,11 +2,13 @@ package config
 
 import (
 	"os"
+	"strings"
 	"time"
 )
 
 type Config struct {
 	Port              string
+	AllowedOrigins    []string
 	MongoURI          string
 	JWTSecret         []byte
 	JWTRefreshSecret  []byte
@@ -21,6 +23,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		Port:              getEnv("PORT", "8000"),
+		AllowedOrigins:    getEnvSlice("ALLOWED_ORIGINS", []string{"http://lockkeep.localhost"}),
 		MongoURI:          getEnv("MONGODB_URI", "mongodb://localhost:27017/lockkeep"),
 		JWTSecret:         []byte(getEnv("JWT_SECRET", "change-me-in-production-min-32-characters-long")),
 		JWTRefreshSecret:  []byte(getEnv("JWT_REFRESH_SECRET", "different-change-me-in-production")),
@@ -36,6 +39,13 @@ func Load() *Config {
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvSlice(key string, fallback []string) []string {
+	if v := os.Getenv(key); len(v) > 0 {
+		return strings.Split(v, ",")
 	}
 	return fallback
 }
