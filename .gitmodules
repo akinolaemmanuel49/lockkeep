@@ -1,0 +1,6 @@
+[submodule "lockkeep-backend"]
+	path = lockkeep-backend
+	url = https://github.com/akinolaemmanuel49/lockkeep-backend.git
+[submodule "lockkeep-frontend"]
+	path = lockkeep-frontend
+	url = https://github.com/akinolaemmanuel49/lockkeep-frontend.git
