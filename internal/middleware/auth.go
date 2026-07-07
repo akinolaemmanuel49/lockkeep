@@ -31,6 +31,7 @@ func Auth(jwtManager *jwt.Manager) gin.HandlerFunc {
 		c.Set("userID", claims.UserID)
 		c.Set("tenantID", claims.TenantID)
 		c.Set("email", claims.Email)
+		c.Set("userType", claims.UserType)
 		c.Next()
 	}
 }

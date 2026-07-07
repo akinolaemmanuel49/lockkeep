@@ -6,11 +6,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+type UserType string // NEW
+
+const ADMIN UserType = "admin" // NEW
+const USER UserType = "user"   // NEW
+
 type User struct {
 	ID       bson.ObjectID `bson:"_id,omitempty" json:"id"`
 	Username string        `bson:"username" json:"username"`
 	Email    string        `bson:"email" json:"email"`
 	TenantID string        `bson:"tenant_id" json:"tenantId"`
+	UserType UserType      `bson:"user_type" json:"userType"` // NEW
 
 	AuthMethod     string  `bson:"auth_method" json:"authMethod"`    // "oauth_google", "oauth_github", "local"
 	AuthProviderID *string `bson:"auth_provider_id" json:"-"`        // OAuth sub ID

@@ -175,7 +175,7 @@ func (s *VaultService) UpdateVaultItem(
 			return nil, fmt.Errorf("failed to fetch current crypto policy: %w", err)
 		}
 
-		updates["secret.version"] = currentPolicy.Version
+		updates["secret.version"] = currentPolicy.Version + 1
 	}
 
 	if err := s.vaultRepo.Update(ctx, itemID, user.ID, user.TenantID, updates); err != nil {

@@ -17,6 +17,7 @@ type UserResponse struct {
 	ID                string                `json:"id"`
 	Email             string                `json:"email"`
 	TenantID          string                `json:"tenantId"`
+	UserType          domain.UserType       `json:"userType"`
 	HasMasterPassword bool                  `json:"hasMasterPassword"`
 	AuthMethod        string                `json:"authMethod,omitempty"`
 	Vault             *domain.VaultMetadata `json:"vault,omitempty"`

@@ -71,6 +71,15 @@ type KDFDTO struct {
 	Parallelism uint8  `json:"parallelism"`
 }
 
+type SetCurrentPolicy struct {
+	KDFParams struct {
+		Algorithm   string `json:"algorithm"`
+		Memory      uint32 `json:"memory"`
+		Iterations  uint32 `json:"iterations"`
+		Parallelism uint8  `json:"parallelism"`
+	} `json:"kdfParams"`
+}
+
 type VaultItemType string
 
 const (

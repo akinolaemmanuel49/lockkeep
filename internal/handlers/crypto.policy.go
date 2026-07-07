@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -32,7 +33,19 @@ func (h *CryptoPolicyHandler) GetCurrentPolicy(c *gin.Context) {
 }
 
 func (h *CryptoPolicyHandler) SetCurrentPolicy(c *gin.Context) {
-	var policy domain.CryptoPolicy
+	userType, exists := c.Get("userType")
+
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	if userType != domain.ADMIN {
+		c.JSON(http.StatusForbidden, gin.H{"error": "invalid user type"})
+		return
+	}
+
+	var policy dto.SetCurrentPolicy
 	if err := c.ShouldBindJSON(&policy); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

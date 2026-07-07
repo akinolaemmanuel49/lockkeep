@@ -10,9 +10,10 @@ import (
 )
 
 type Claims struct {
-	UserID   string `json:"user_id"`
-	TenantID string `json:"tenant_id"`
-	Email    string `json:"email"`
+	UserID   string          `json:"user_id"`
+	TenantID string          `json:"tenant_id"`
+	Email    string          `json:"email"`
+	UserType domain.UserType `json:"user_type"` // NEW
 	jwt.RegisteredClaims
 }
 
@@ -44,6 +45,7 @@ func (m *Manager) Generate(user *domain.User) (*TokenPair, error) {
 		UserID:   user.ID.Hex(),
 		TenantID: user.TenantID,
 		Email:    user.Email,
+		UserType: user.UserType, // NEW
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),

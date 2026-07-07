@@ -146,6 +146,7 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		AuthMethod:   "local",
 		PasswordHash: string(passwordHash),
 		Vault:        nil,
+		UserType:     domain.USER,
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
@@ -363,6 +364,7 @@ func (s *AuthService) toUserResponse(user *domain.User) *dto.UserResponse {
 		TenantID:          user.TenantID,
 		HasMasterPassword: hasMasterPassword,
 		AuthMethod:        user.AuthMethod,
+		UserType:          user.UserType,
 		Vault:             user.Vault,
 	}
 }
