@@ -8,3 +8,11 @@ type CryptoPolicy struct {
 	KDFParams KDFParams `bson:"kdf_params" json:"kdfParams"`
 	UpdatedAt time.Time `bson:"updated_at" json:"updatedAt"`
 }
+
+type KDFParams struct {
+	Algorithm   string `bson:"algorithm" json:"algorithm"`
+	Salt        string `bson:"salt" json:"salt"`
+	Memory      uint32 `bson:"memory" json:"memory"`
+	Iterations  uint32 `bson:"iterations" json:"iterations"`
+	Parallelism uint8  `bson:"parallelism" json:"parallelism"`
+}

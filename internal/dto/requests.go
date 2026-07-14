@@ -1,5 +1,7 @@
 package dto
 
+import "github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+
 type VaultItemUpdate struct {
 	ID     string        `json:"id" binding:"required"`
 	Type   VaultItemType `json:"type" binding:"required"`
@@ -42,15 +44,25 @@ type SetVerificationHashRequest struct {
 	KDFParams        KDFDTO `json:"kdf_params" binding:"required"`
 }
 
-type RegisterRequest struct {
+type RegisterRequestDTO struct {
+	Username string `json:"username" binding:"required,min=6"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
 }
 
-type LoginRequest struct {
+type LoginRequestDTO struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
+
+type OauthAuthorizeDTO struct {
+	Method     domain.AuthMethod `json:"method" binding:"required,oneof=local oauth_google oauth_github oauth_auth0"`
+	ProviderID string            `json:"providerID" binding:"required"`
+	Email      string            `json:"email" binding:"required,email"`
+	Username   string            `json:"username" binding:"required"`
+}
+
+// method domain.AuthMethod, providerID, email, username string
 
 type VerifyVaultPasswordRequest struct {
 	VerificationHash string `json:"verification_hash" binding:"required"`

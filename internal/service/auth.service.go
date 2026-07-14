@@ -12,7 +12,8 @@ import (
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"golang.org/x/crypto/bcrypt"
@@ -20,83 +21,142 @@ import (
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrEmailExists        = errors.New("an account with this email already exists")
-	ErrEmailInUse         = errors.New("email already in use")
+	ErrEmailTaken         = errors.New("email already registered")
 	ErrUserNotFound       = errors.New("user not found")
 	ErrOAuthEmailRequired = errors.New("a public email address is required")
-	ErrCannotEditOAuth    = errors.New("cannot edit for oauth accounts")
-	ErrInvalidPassword    = errors.New("invalid password")
-	ErrPolicyNotFound     = errors.New("no policy not found")
 )
 
 type AuthService struct {
-	cfg              *config.Config
-	userRepo         *repository.UserRepository
-	cryptoPolicyRepo *repository.CryptoPolicyRepository
-	jwtManager       *jwt.Manager
+	cfg            *config.Config
+	userRepo       ports.UserRepository
+	identityRepo   ports.IdentityRepository
+	membershipRepo ports.MembershipRepository
+	unitOfWork     mongo.UnitOfWork
+	jwtManager     *jwt.Manager
 }
 
-func NewAuthService(cfg *config.Config,
-	userRepo *repository.UserRepository,
-	cryptoPolicyRepo *repository.CryptoPolicyRepository,
-	jwtManager *jwt.Manager) *AuthService {
+func NewAuthService(
+	cfg *config.Config,
+	userRepo ports.UserRepository,
+	identityRepo ports.IdentityRepository,
+	membershipRepo ports.MembershipRepository,
+	unitOfWork mongo.UnitOfWork,
+	jwtManager *jwt.Manager,
+) *AuthService {
 	return &AuthService{
-		cfg:              cfg,
-		userRepo:         userRepo,
-		cryptoPolicyRepo: cryptoPolicyRepo,
-		jwtManager:       jwtManager,
+		cfg:            cfg,
+		userRepo:       userRepo,
+		identityRepo:   identityRepo,
+		membershipRepo: membershipRepo,
+		unitOfWork:     unitOfWork,
+		jwtManager:     jwtManager,
 	}
 }
 
-// --- OAuth ---
+// Register creates a new user with local authentication
+func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO) (*domain.User, error) {
+	var createdUser *domain.User
 
-func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*dto.TokenPair, *dto.UserResponse, error) {
-	userInfo, err := s.getAuth0UserInfo(accessToken)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	provider := extractProvider(userInfo.Sub)
-
-	user, err := s.userRepo.FindByOAuth(ctx, provider, userInfo.Sub)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if user == nil {
-		if userInfo.Email == "" {
-			return nil, nil, ErrOAuthEmailRequired
-		}
-
-		existing, err := s.userRepo.FindByEmail(ctx, userInfo.Email)
+	err := s.unitOfWork.Within(ctx, func(txCtx context.Context) error {
+		exists, err := s.userRepo.EmailExists(txCtx, input.Email)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
-		if existing != nil {
-			return nil, nil, ErrEmailExists
+		if exists {
+			return ErrEmailTaken
 		}
 
-		user = &domain.User{
-			Email:          userInfo.Email,
-			TenantID:       generateTenantID(),
-			AuthMethod:     "oauth_" + provider,
-			AuthProviderID: &userInfo.Sub,
-			Vault:          nil,
+		hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("hash password: %w", err)
 		}
-		if err := s.userRepo.Create(ctx, user); err != nil {
-			return nil, nil, err
+
+		user := &domain.User{
+			ID:       bson.NewObjectID(),
+			Username: input.Username,
+			Email:    input.Email,
 		}
+
+		if err := s.userRepo.Create(txCtx, user); err != nil {
+			return err
+		}
+		// Feels weird, might be better off manually passing timestamps
+		createdUser, err = s.userRepo.FindByID(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+
+		identity := &domain.Identity{
+			ID:           bson.NewObjectID(),
+			UserID:       user.ID,
+			AuthMethod:   domain.AuthMethodLocal,
+			PasswordHash: string(hash),
+		}
+
+		if err := s.identityRepo.Create(txCtx, identity); err != nil {
+			return fmt.Errorf("create identity: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	tokens, err := s.jwtManager.Generate(user)
+	return createdUser, nil
+}
+
+// Login validates credentials and returns user + token pair
+func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*domain.User, *jwt.TokenPair, error) {
+	user, err := s.userRepo.FindByEmail(ctx, input.Email)
+	if err != nil {
+		return nil, nil, err
+	}
+	if user == nil {
+		return nil, nil, ErrInvalidCredentials
+	}
+
+	identities, err := s.identityRepo.FindByUserID(ctx, user.ID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &dto.TokenPair{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-	}, s.toUserResponse(user), nil
+	var localIdentity *domain.Identity
+	for i := range identities {
+		if identities[i].AuthMethod == domain.AuthMethodLocal {
+			localIdentity = &identities[i]
+			break
+		}
+	}
+
+	if localIdentity == nil {
+		return nil, nil, ErrInvalidCredentials
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(localIdentity.PasswordHash), []byte(input.Password)); err != nil {
+		return nil, nil, ErrInvalidCredentials
+	}
+
+	_ = s.identityRepo.RecordLogin(ctx, localIdentity.ID)
+
+	claims := s.buildClaims(ctx, user)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, tokens, nil
+}
+
+func (s *AuthService) Me(ctx context.Context, userID string) (*domain.User, error) {
+	userObjID, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.userRepo.FindByID(ctx, userObjID)
+
 }
 
 func (s *AuthService) getAuth0UserInfo(accessToken string) (*dto.Auth0UserInfo, error) {
@@ -124,264 +184,168 @@ func (s *AuthService) getAuth0UserInfo(accessToken string) (*dto.Auth0UserInfo, 
 	return &userInfo, nil
 }
 
-// --- Local Auth ---
-
-func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.TokenPair, *dto.UserResponse, error) {
-	existing, err := s.userRepo.FindByEmail(ctx, req.Email)
-	if err != nil {
-		return nil, nil, err
-	}
-	if existing != nil {
-		return nil, nil, ErrEmailExists
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	user := &domain.User{
-		Email:        req.Email,
-		TenantID:     generateTenantID(),
-		AuthMethod:   "local",
-		PasswordHash: string(passwordHash),
-		Vault:        nil,
-		UserType:     domain.USER,
-	}
-
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		return nil, nil, err
-	}
-
-	tokens, err := s.jwtManager.Generate(user)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return &dto.TokenPair{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-	}, s.toUserResponse(user), nil
-}
-
-func (s *AuthService) Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenPair, *dto.UserResponse, error) {
-	user, err := s.userRepo.FindByEmail(ctx, req.Email)
-	if err != nil {
-		return nil, nil, err
-	}
-	if user == nil || user.AuthMethod != "local" {
-		return nil, nil, ErrInvalidCredentials
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, nil, ErrInvalidCredentials
-	}
-
-	tokens, err := s.jwtManager.Generate(user)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return &dto.TokenPair{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-	}, s.toUserResponse(user), nil
-}
-
-func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*dto.TokenPair, error) {
-	userID, err := s.jwtManager.ValidateRefresh(refreshToken)
-	if err != nil {
-		return nil, err
-	}
-
-	objectID, err := s.jwtManager.ParseUserID(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := s.userRepo.FindByID(ctx, objectID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-
-	tokens, err := s.jwtManager.Generate(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.TokenPair{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-	}, nil
-}
-
-func (s *AuthService) SetVerificationHash(ctx context.Context, userID bson.ObjectID, req dto.SetVerificationHashRequest) (*dto.UserResponse, error) {
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-
-	currentPolicy, err := s.cryptoPolicyRepo.GetCurrent(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch current crypto policy: %w", err)
-	}
-
-	vault := domain.VaultMetadata{
-		Version:          currentPolicy.Version,
-		VerificationHash: req.VerificationHash,
-		KDF: domain.KDFParams{
-			Algorithm:   req.KDFParams.Algorithm,
-			Salt:        req.KDFParams.Salt,
-			Memory:      req.KDFParams.Memory,
-			Iterations:  req.KDFParams.Iterations,
-			Parallelism: req.KDFParams.Parallelism,
-		},
-	}
-
-	if err := s.userRepo.UpdateVaultMetadata(ctx, userID, vault); err != nil {
-		return nil, err
-	}
-
-	user.Vault = &vault
-	return s.toUserResponse(user), nil
-}
-
-func (s *AuthService) GetKDFParams(ctx context.Context, userID bson.ObjectID) (*domain.KDFParams, error) {
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-
-	if user.Vault != nil {
-		return &user.Vault.KDF, nil
-	}
-
-	policy, err := s.cryptoPolicyRepo.GetCurrent(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if policy != nil {
-		return &policy.KDFParams, nil
-
-	}
-
-	return nil, ErrPolicyNotFound
-}
-
-func (s *AuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*dto.TokenPair, *dto.UserResponse, error) {
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if user == nil {
-		return nil, nil, ErrUserNotFound
-	}
-
-	if user.AuthMethod != "local" {
-		return nil, nil, ErrCannotEditOAuth
-	}
-
-	if user.Email == req.Email {
-		tokens, err := s.jwtManager.Generate(user)
-		if err != nil {
-			return nil, nil, err
-		}
-		return &dto.TokenPair{AccessToken: tokens.AccessToken, RefreshToken: tokens.RefreshToken}, s.toUserResponse(user), nil
-	}
-
-	ok, err := s.userRepo.EmailExists(ctx, req.Email)
-	if err != nil {
-		return nil, nil, err
-	}
-	if ok {
-		return nil, nil, ErrEmailInUse
-	}
-
-	if err := s.userRepo.UpdateEmail(ctx, userID, req.Email); err != nil {
-		return nil, nil, err
-	}
-
-	user, err = s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	tokens, err := s.jwtManager.Generate(user)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return &dto.TokenPair{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-	}, s.toUserResponse(user), nil
-}
-
-func (s *AuthService) UpdateAccountPassword(ctx context.Context, userID bson.ObjectID, req dto.UpdateAccountPasswordRequest) error {
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if user == nil {
-		return ErrUserNotFound
-	}
-
-	if user.AuthMethod != "local" {
-		return ErrCannotEditOAuth
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
-		return ErrInvalidPassword
-	}
-
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	return s.userRepo.UpdatePassword(ctx, userID, string(passwordHash))
-}
-
-func (s *AuthService) toUserResponse(user *domain.User) *dto.UserResponse {
-	hasMasterPassword := false
-	if user.Vault != nil {
-		hasMasterPassword = user.Vault.VerificationHash != ""
-	}
-
-	return &dto.UserResponse{
-		ID:                user.ID.Hex(),
-		Email:             user.Email,
-		TenantID:          user.TenantID,
-		HasMasterPassword: hasMasterPassword,
-		AuthMethod:        user.AuthMethod,
-		UserType:          user.UserType,
-		Vault:             user.Vault,
-	}
-}
-
-func generateTenantID() string {
-	return "tenant_" + bson.NewObjectID().Hex()[:8]
-}
-
-func extractProvider(sub string) string {
+func extractProvider(sub string) (domain.AuthMethod, error) {
 	if strings.HasPrefix(sub, "google-oauth2|") {
-		return "google"
+		return "oauth_google", nil
 	}
 	if strings.HasPrefix(sub, "github|") {
-		return "github"
+		return "oauth_github", nil
 	}
 	if strings.HasPrefix(sub, "auth0|") {
-		return "local"
+		return "oauth_auth0", nil
 	}
-	return "oauth"
+	return "", fmt.Errorf("invalid provider")
+}
+
+// OAuth handles OAuth registration/login
+func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.User, *jwt.TokenPair, bool, error) {
+	userInfo, err := s.getAuth0UserInfo(accessToken)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	provider, err := extractProvider(userInfo.Sub)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	identity, err := s.identityRepo.FindByOAuth(ctx, domain.AuthMethod(provider), userInfo.Sub)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	input := dto.OauthAuthorizeDTO{
+		Method:     provider,
+		ProviderID: userInfo.Sub,
+		Email:      userInfo.Email,
+		Username:   userInfo.Nickname,
+	}
+
+	var user *domain.User
+	var isNewUser bool
+	var tokens *jwt.TokenPair
+
+	if identity != nil {
+		user, err = s.userRepo.FindByID(ctx, identity.UserID)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		_ = s.identityRepo.RecordLogin(ctx, identity.ID)
+
+		isNewUser = false
+
+		claims := s.buildClaims(ctx, user)
+		tokens, err = s.jwtManager.GeneratePair(claims)
+		if err != nil {
+			return nil, nil, isNewUser, err
+		}
+
+	} else {
+		user, err = s.registerOAuthUser(ctx, input)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		isNewUser = true
+	}
+
+	return user, tokens, isNewUser, nil
+}
+
+func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuthorizeDTO) (*domain.User, error) {
+	var createdOauthUser *domain.User
+
+	err := s.unitOfWork.Within(ctx, func(txCtx context.Context) error {
+		existing, err := s.userRepo.FindByEmail(txCtx, input.Email)
+		if err != nil {
+			return err
+		}
+
+		var userID bson.ObjectID
+		if existing != nil {
+			userID = existing.ID
+		} else {
+			user := &domain.User{
+				ID:       bson.NewObjectID(),
+				Username: input.Username,
+				Email:    input.Email,
+			}
+			if err := s.userRepo.Create(txCtx, user); err != nil {
+				return err
+			}
+			userID = user.ID
+			createdOauthUser = user
+		}
+
+		identity := &domain.Identity{
+			ID:             bson.NewObjectID(),
+			UserID:         userID,
+			AuthMethod:     input.Method,
+			AuthProviderID: &input.ProviderID,
+		}
+
+		if err := s.identityRepo.Create(txCtx, identity); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return createdOauthUser, nil
+}
+
+func (s *AuthService) buildClaims(ctx context.Context, user *domain.User) jwt.Claims {
+	role := domain.RoleSystemUser
+
+	memberships, _ := s.membershipRepo.FindByUser(ctx, user.ID)
+
+	orgClaims := make([]jwt.OrgClaim, len(memberships))
+	for i, m := range memberships {
+		orgClaims[i] = jwt.OrgClaim{
+			OrgID:     m.OrganizationID.Hex(),
+			Role:      string(m.RoleID),
+			TeamRoles: extractTeamRoles(m.TeamRoles),
+		}
+	}
+
+	return jwt.Claims{
+		UserID:     user.ID.Hex(),
+		Email:      user.Email,
+		SystemRole: string(role),
+		Orgs:       orgClaims,
+	}
+}
+
+func extractTeamRoles(roles []domain.TeamRole) map[string]string {
+	result := make(map[string]string, len(roles))
+	for _, r := range roles {
+		result[r.TeamID.Hex()] = string(r.RoleID)
+	}
+	return result
+}
+
+// Refresh rotates tokens using refresh token
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*jwt.TokenPair, error) {
+	userID, err := s.jwtManager.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	objUserID, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.userRepo.FindByID(ctx, objUserID)
+	if err != nil || user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	claims := s.buildClaims(ctx, user)
+	return s.jwtManager.GeneratePair(claims)
 }

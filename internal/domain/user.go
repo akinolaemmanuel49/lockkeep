@@ -6,38 +6,15 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-type UserType string // NEW
-
-const ADMIN UserType = "admin" // NEW
-const USER UserType = "user"   // NEW
-
 type User struct {
-	ID       bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	Username string        `bson:"username" json:"username"`
-	Email    string        `bson:"email" json:"email"`
-	TenantID string        `bson:"tenant_id" json:"tenantId"`
-	UserType UserType      `bson:"user_type" json:"userType"` // NEW
+	ID        bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	Username  string        `bson:"username" json:"username"`
+	Email     string        `bson:"email" json:"email"`
+	AvatarURL *string       `bson:"avatar_url,omitempty" json:"avatarUrl,omitempty"`
 
-	AuthMethod     string  `bson:"auth_method" json:"authMethod"`    // "oauth_google", "oauth_github", "local"
-	AuthProviderID *string `bson:"auth_provider_id" json:"-"`        // OAuth sub ID
-	PasswordHash   string  `bson:"password_hash,omitempty" json:"-"` // For local auth only
-
-	Vault *VaultMetadata `bson:"vault" json:"vault"`
+	// Personal vault metadata — zero-knowledge, client-derived master key
+	Vault *VaultMetadata `bson:"vault,omitempty" json:"vault,omitempty"`
 
 	CreatedAt time.Time `bson:"created_at" json:"createdAt"`
 	UpdatedAt time.Time `bson:"updated_at" json:"updatedAt"`
-}
-
-type VaultMetadata struct {
-	Version          uint32    `bson:"version" json:"version"`
-	VerificationHash string    `bson:"verification_hash" json:"verificationHash"`
-	KDF              KDFParams `bson:"kdf" json:"kdf"`
-}
-
-type KDFParams struct {
-	Algorithm   string `bson:"algorithm" json:"algorithm"`
-	Salt        string `bson:"salt" json:"salt"`
-	Memory      uint32 `bson:"memory" json:"memory"`
-	Iterations  uint32 `bson:"iterations" json:"iterations"`
-	Parallelism uint8  `bson:"parallelism" json:"parallelism"`
 }

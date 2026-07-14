@@ -4,18 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
-
-type Claims struct {
-	UserID   string          `json:"user_id"`
-	TenantID string          `json:"tenant_id"`
-	Email    string          `json:"email"`
-	UserType domain.UserType `json:"user_type"` // NEW
-	jwt.RegisteredClaims
-}
 
 type TokenPair struct {
 	AccessToken  string
@@ -38,18 +29,19 @@ func NewManager(secret, refreshSecret []byte, accessExpiry, refreshExpiry time.D
 	}
 }
 
-func (m *Manager) Generate(user *domain.User) (*TokenPair, error) {
+// GeneratePair creates access and refresh tokens from RBAC claims
+func (m *Manager) GeneratePair(claims Claims) (*TokenPair, error) {
 	now := time.Now()
 
 	accessClaims := Claims{
-		UserID:   user.ID.Hex(),
-		TenantID: user.TenantID,
-		Email:    user.Email,
-		UserType: user.UserType, // NEW
+		UserID:     claims.UserID,
+		Email:      claims.Email,
+		SystemRole: claims.SystemRole,
+		Orgs:       claims.Orgs,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
-			Subject:   user.ID.Hex(),
+			Subject:   claims.UserID,
 		},
 	}
 
@@ -61,7 +53,7 @@ func (m *Manager) Generate(user *domain.User) (*TokenPair, error) {
 	refreshClaims := jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshExpiry)),
 		IssuedAt:  jwt.NewNumericDate(now),
-		Subject:   user.ID.Hex(),
+		Subject:   claims.UserID,
 	}
 
 	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(m.refreshSecret)
@@ -75,7 +67,8 @@ func (m *Manager) Generate(user *domain.User) (*TokenPair, error) {
 	}, nil
 }
 
-func (m *Manager) ValidateAccess(tokenString string) (*Claims, error) {
+// ValidateAccessToken parses and validates an access token, returning RBAC claims
+func (m *Manager) ValidateAccessToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return m.secret, nil
 	})
@@ -89,7 +82,8 @@ func (m *Manager) ValidateAccess(tokenString string) (*Claims, error) {
 	return nil, errors.New("invalid token claims")
 }
 
-func (m *Manager) ValidateRefresh(tokenString string) (string, error) {
+// ValidateRefreshToken parses a refresh token and returns the user ID (subject)
+func (m *Manager) ValidateRefreshToken(tokenString string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return m.refreshSecret, nil
 	})
@@ -108,6 +102,7 @@ func (m *Manager) ValidateRefresh(tokenString string) (string, error) {
 	return subject, nil
 }
 
+// ParseUserID converts a hex string to ObjectID
 func (m *Manager) ParseUserID(userID string) (bson.ObjectID, error) {
 	return bson.ObjectIDFromHex(userID)
 }

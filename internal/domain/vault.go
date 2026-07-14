@@ -17,10 +17,10 @@ const (
 	ItemAPIKey      VaultItemType = "api_key"
 )
 
+// VaultItem — personal secrets only. Zero-knowledge. Server never decrypts.
 type VaultItem struct {
-	ID       bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID   bson.ObjectID `bson:"user_id" json:"userId"`
-	TenantID string        `bson:"tenant_id" json:"tenantId"`
+	ID     bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID bson.ObjectID `bson:"user_id" json:"userId"`
 
 	Type     VaultItemType `bson:"type" json:"type"`
 	Name     string        `bson:"name" json:"name"`
@@ -36,4 +36,10 @@ type Secret struct {
 	IV         string `bson:"iv" json:"iv"`
 	Tag        string `bson:"tag" json:"tag"`
 	Version    uint32 `bson:"version,omitempty" json:"version,omitempty"`
+}
+
+type VaultMetadata struct {
+	Version          uint32    `bson:"version" json:"version"`
+	VerificationHash string    `bson:"verification_hash" json:"verificationHash"`
+	KDF              KDFParams `bson:"kdf" json:"kdf"`
 }
