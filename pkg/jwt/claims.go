@@ -15,12 +15,3 @@ type OrgClaim struct {
 	Role      string            `json:"role"`
 	TeamRoles map[string]string `json:"team_roles,omitempty"`
 }
-
-func (c Claims) ToJWTClaims() jwt.MapClaims {
-	return jwt.MapClaims{
-		"sub":         c.UserID,
-		"email":       c.Email,
-		"system_role": c.SystemRole,
-		"orgs":        c.Orgs,
-	}
-}

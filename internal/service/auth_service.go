@@ -12,18 +12,13 @@ import (
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
+	auth_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/auth"
+	user_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/user"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrEmailTaken         = errors.New("email already registered")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrOAuthEmailRequired = errors.New("a public email address is required")
 )
 
 type AuthService struct {
@@ -32,7 +27,7 @@ type AuthService struct {
 	identityRepo   ports.IdentityRepository
 	membershipRepo ports.MembershipRepository
 	unitOfWork     mongo.UnitOfWork
-	jwtManager     *jwt.Manager
+	jwtManager     ports.JWTManager
 }
 
 func NewAuthService(
@@ -41,7 +36,7 @@ func NewAuthService(
 	identityRepo ports.IdentityRepository,
 	membershipRepo ports.MembershipRepository,
 	unitOfWork mongo.UnitOfWork,
-	jwtManager *jwt.Manager,
+	jwtManager ports.JWTManager,
 ) *AuthService {
 	return &AuthService{
 		cfg:            cfg,
@@ -63,7 +58,7 @@ func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO
 			return err
 		}
 		if exists {
-			return ErrEmailTaken
+			return user_errors.ErrEmailTaken
 		}
 
 		hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
@@ -108,13 +103,13 @@ func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO
 }
 
 // Login validates credentials and returns user + token pair
-func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*domain.User, *jwt.TokenPair, error) {
+func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*domain.User, *dto.TokenPair, error) {
 	user, err := s.userRepo.FindByEmail(ctx, input.Email)
 	if err != nil {
 		return nil, nil, err
 	}
 	if user == nil {
-		return nil, nil, ErrInvalidCredentials
+		return nil, nil, auth_errors.ErrInvalidCredentials
 	}
 
 	identities, err := s.identityRepo.FindByUserID(ctx, user.ID)
@@ -131,11 +126,11 @@ func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*do
 	}
 
 	if localIdentity == nil {
-		return nil, nil, ErrInvalidCredentials
+		return nil, nil, auth_errors.ErrInvalidCredentials
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(localIdentity.PasswordHash), []byte(input.Password)); err != nil {
-		return nil, nil, ErrInvalidCredentials
+		return nil, nil, auth_errors.ErrInvalidCredentials
 	}
 
 	_ = s.identityRepo.RecordLogin(ctx, localIdentity.ID)
@@ -155,8 +150,17 @@ func (s *AuthService) Me(ctx context.Context, userID string) (*domain.User, erro
 		return nil, err
 	}
 
-	return s.userRepo.FindByID(ctx, userObjID)
+	user, err := s.userRepo.FindByID(ctx, userObjID)
 
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		return nil, user_errors.ErrUserNotFound
+	}
+
+	return user, nil
 }
 
 func (s *AuthService) getAuth0UserInfo(accessToken string) (*dto.Auth0UserInfo, error) {
@@ -198,7 +202,7 @@ func extractProvider(sub string) (domain.AuthMethod, error) {
 }
 
 // OAuth handles OAuth registration/login
-func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.User, *jwt.TokenPair, bool, error) {
+func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.User, *dto.TokenPair, bool, error) {
 	userInfo, err := s.getAuth0UserInfo(accessToken)
 	if err != nil {
 		return nil, nil, false, err
@@ -223,12 +227,16 @@ func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.Us
 
 	var user *domain.User
 	var isNewUser bool
-	var tokens *jwt.TokenPair
+	var tokens *dto.TokenPair
 
 	if identity != nil {
 		user, err = s.userRepo.FindByID(ctx, identity.UserID)
 		if err != nil {
 			return nil, nil, false, err
+		}
+
+		if user == nil {
+			return nil, nil, false, user_errors.ErrUserNotFound
 		}
 
 		_ = s.identityRepo.RecordLogin(ctx, identity.ID)
@@ -330,7 +338,7 @@ func extractTeamRoles(roles []domain.TeamRole) map[string]string {
 }
 
 // Refresh rotates tokens using refresh token
-func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*jwt.TokenPair, error) {
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*dto.TokenPair, error) {
 	userID, err := s.jwtManager.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
@@ -342,8 +350,12 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*jwt.To
 	}
 
 	user, err := s.userRepo.FindByID(ctx, objUserID)
-	if err != nil || user == nil {
-		return nil, ErrUserNotFound
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		return nil, user_errors.ErrUserNotFound
 	}
 
 	claims := s.buildClaims(ctx, user)

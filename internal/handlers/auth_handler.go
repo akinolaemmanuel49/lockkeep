@@ -6,16 +6,17 @@ import (
 	"strings"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
+	auth_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/auth"
+	user_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/user"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
-	authService *service.AuthService
+	authService ports.AuthService
 }
 
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
+func NewAuthHandler(authService ports.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
@@ -32,9 +33,9 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 	user, tokens, isNewUser, err := h.authService.OAuth(c.Request.Context(), accessToken)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrOAuthEmailRequired):
+		case errors.Is(err, auth_errors.ErrOAuthEmailRequired):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		case errors.Is(err, service.ErrEmailTaken):
+		case errors.Is(err, user_errors.ErrEmailTaken):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
@@ -69,7 +70,7 @@ func (h *AuthHandler) Register(ctx *gin.Context) {
 
 	user, err := h.authService.Register(ctx.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrEmailTaken) {
+		if errors.Is(err, user_errors.ErrEmailTaken) {
 			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
@@ -92,7 +93,7 @@ func (h *AuthHandler) Login(ctx *gin.Context) {
 
 	user, tokens, err := h.authService.Login(ctx.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidCredentials) {
+		if errors.Is(err, auth_errors.ErrInvalidCredentials) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
@@ -128,21 +129,6 @@ func (h *AuthHandler) Refresh(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token": tokens.AccessToken,
 	})
-}
-
-func (h *AuthHandler) GetMe(ctx *gin.Context) {
-	userID, exists := ctx.Get(middleware.CtxKeyUserID)
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	user, err := h.authService.Me(ctx, userID.(string))
-	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		}
-	}
-	ctx.JSON(http.StatusOK, gin.H{"user": user, "message": "user retrieved successfully"})
 }
 
 func (h *AuthHandler) Logout(ctx *gin.Context) {

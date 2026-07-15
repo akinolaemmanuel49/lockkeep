@@ -62,8 +62,6 @@ type OauthAuthorizeDTO struct {
 	Username   string            `json:"username" binding:"required"`
 }
 
-// method domain.AuthMethod, providerID, email, username string
-
 type VerifyVaultPasswordRequest struct {
 	VerificationHash string `json:"verification_hash" binding:"required"`
 }

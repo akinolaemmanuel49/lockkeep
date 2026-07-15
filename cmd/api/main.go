@@ -63,6 +63,7 @@ func main() {
 
 	// Services
 	authService := service.NewAuthService(cfg, userRepo, identityRepo, membershipRepo, uow, jwtManager)
+	userService := service.NewUserService(cfg, userRepo)
 	// orgService := service.NewOrganizationService(orgRepo, membershipRepo)
 	// teamService := service.NewTeamService(teamRepo, membershipRepo)
 	// vaultService := service.NewVaultService(vaultItemRepo)
@@ -72,6 +73,7 @@ func main() {
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authService)
+	userHandler := handlers.NewUserHandler(userService)
 	// orgHandler := handlers.NewOrganizationHandler(orgService)
 	// ...
 
@@ -92,19 +94,20 @@ func main() {
 	// API v2
 	v2 := r.Group("/api/v2")
 
-	// Public
+	// Public routes (register, login, refresh, oauth)
 	v2.POST("/auth/register", authHandler.Register)
 	v2.POST("/auth/login", authHandler.Login)
-	v2.POST("/auth/oauth", authHandler.OAuth)
 	v2.POST("/auth/refresh", authHandler.Refresh)
+	v2.POST("/auth/oauth", authHandler.OAuth)
 
-	// Protected
-	me := v2.Group("/me")
-	me.Use(authMiddleware)
+	// User routes (profile, requires auth)
+	user := v2.Group("/user")
+	user.Use(authMiddleware)
 	{
-		me.GET("", authHandler.GetMe)
-		// me.GET("/vault", vaultHandler.GetVault)
-		// me.POST("/vault/items", vaultHandler.CreateItem)
+		user.GET("/me", userHandler.GetMe)
+		// PATCH /me — update profile
+		// GET /me/vault — personal vault metadata
+		// etc.
 	}
 
 	// Organizations
