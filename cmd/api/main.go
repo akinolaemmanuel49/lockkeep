@@ -5,11 +5,12 @@ import (
 	"log"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repository"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repositories"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -35,11 +36,11 @@ func main() {
 	uow := mongo.NewUnitOfWork(rawDB.Client())
 
 	// Repositories
-	userRepo := repository.NewUserRepository(rawDB)
-	identityRepo := repository.NewIdentityRepository(rawDB)
-	orgRepo := repository.NewOrganizationRepository(rawDB)
-	membershipRepo := repository.NewMembershipRepository(rawDB)
-	// teamRepo := repository.NewTeamRepository(rawDB)
+	userRepo := repositories.NewUserRepository(rawDB)
+	identityRepo := repositories.NewIdentityRepository(rawDB)
+	orgRepo := repositories.NewOrganizationRepository(rawDB)
+	membershipRepo := repositories.NewMembershipRepository(rawDB)
+	teamRepo := repositories.NewTeamRepository(rawDB)
 	// vaultItemRepo := repository.NewVaultItemRepository(rawDB)
 	// sharedSecretRepo := repository.NewSharedSecretRepository(rawDB)
 	// auditRepo := repository.NewAuditRepository(rawDB)
@@ -62,10 +63,10 @@ func main() {
 	jwtManager := jwt.NewManager(cfg.JWTSecret, cfg.JWTRefreshSecret, cfg.JWTExpiry, cfg.RefreshExpiry)
 
 	// Services
-	authService := service.NewAuthService(cfg, userRepo, identityRepo, membershipRepo, uow, jwtManager)
-	userService := service.NewUserService(cfg, userRepo)
-	// orgService := service.NewOrganizationService(orgRepo, membershipRepo)
-	// teamService := service.NewTeamService(teamRepo, membershipRepo)
+	authService := services.NewAuthService(cfg, userRepo, identityRepo, membershipRepo, uow, jwtManager)
+	userService := services.NewUserService(cfg, userRepo)
+	orgService := services.NewOrganizationService(orgRepo, membershipRepo)
+	teamService := services.NewTeamService(teamRepo, membershipRepo)
 	// vaultService := service.NewVaultService(vaultItemRepo)
 	// sharedSecretService := service.NewSharedSecretService(sharedSecretRepo, auditRepo)
 	// auditService := service.NewAuditService(auditRepo)
@@ -74,12 +75,12 @@ func main() {
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)
-	// orgHandler := handlers.NewOrganizationHandler(orgService)
-	// ...
+	orgHandler := handlers.NewOrganizationHandler(orgService)
+	teamHandler := handlers.NewTeamHandler(teamService)
 
 	// Middleware
 	authMiddleware := middleware.Auth(jwtManager)
-	// requireOrgAccess := middleware.RequireOrgAccess(membershipRepo, orgRepo)
+	requireOrgAccess := middleware.RequireOrgAccess(membershipRepo, orgRepo)
 
 	// Router
 	r := gin.Default()
@@ -110,20 +111,26 @@ func main() {
 		// etc.
 	}
 
-	// Organizations
-	// orgs := v2.Group("/organizations")
-	// orgs.Use(authMiddleware)
-	// {
-	//     orgs.GET("", orgHandler.List)
-	//     orgs.POST("", orgHandler.Create)
-	//     org := orgs.Group("/:orgSlug")
-	//     org.Use(requireOrgAccess)
-	//     {
-	//         org.GET("", orgHandler.Get)
-	//         org.GET("/members", orgHandler.ListMembers)
-	//         org.POST("/teams", teamHandler.Create)
-	//     }
-	// }
+	orgs := v2.Group("/organizations")
+	orgs.Use(authMiddleware)
+	{
+		orgs.GET("", orgHandler.List)
+		orgs.POST("", orgHandler.Create)
+
+		org := orgs.Group("/:orgSlug")
+		org.Use(requireOrgAccess)
+		{
+			org.GET("", orgHandler.Get)
+			org.GET("/teams", teamHandler.List)
+			org.POST("/teams", middleware.RequirePermission(domain.PermTeamManage), teamHandler.Create)
+
+			team := org.Group("/teams")
+			{
+				team.GET("/:teamSlug", teamHandler.Get)
+				team.DELETE("/:teamID", middleware.RequirePermission(domain.PermTeamManage), teamHandler.Delete)
+			}
+		}
+	}
 
 	port := cfg.Port
 	log.Printf("Server starting on :%s", port)

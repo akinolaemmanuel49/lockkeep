@@ -1,82 +1,89 @@
 package middleware
 
-// import (
-// 	"net/http"
+import (
+	"net/http"
 
-// 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
-// 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
-// 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
-// 	"github.com/gin-gonic/gin"
-// )
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/utils"
+	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
 
-// const (
-// 	CtxKeyOrgID      = "orgID"
-// 	CtxKeyMembership = "membership"
-// 	CtxKeyTeamID     = "teamID"
-// )
+const (
+	CtxKeyOrgID      = "orgID"
+	CtxKeyTeamID     = "teamID"
+	CtxKeyMembership = "membership"
+)
 
-// // RequireOrgAccess verifies the user is a member of the requested organization
-// func RequireOrgAccess(membershipRepo ports.MembershipRepository) gin.HandlerFunc {
-// 	return func(c *gin.Context) {
-// 		userID := c.GetString(CtxKeyUserID)
-// 		orgSlug := c.Param("orgSlug")
+// RequireOrgAccess verifies the user is a member of the requested organization
+func RequireOrgAccess(membershipRepo ports.MembershipRepository, orgRepo ports.OrganizationRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetString(CtxKeyUserID)
+		orgSlug := c.Param("orgSlug")
 
-// 		// Need to resolve slug → org ID first (via org repo lookup)
-// 		// Simplified: assume orgID is available or resolved earlier
-// 		// Full implementation needs OrganizationRepository injected
+		// Resolve slug to org
+		org, err := orgRepo.FindBySlug(c.Request.Context(), orgSlug)
+		if err != nil || org == nil {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+			return
+		}
 
-// 		c.Next()
-// 	}
-// }
+		objUserID, err := bson.ObjectIDFromHex(userID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid user"})
+			return
+		}
 
-// // RequirePermission checks if the user has a specific permission
-// func RequirePermission(perm domain.Permission) gin.HandlerFunc {
-// 	return func(c *gin.Context) {
-// 		claims := c.MustGet(CtxKeyClaims).(jwt.Claims)
+		membership, err := membershipRepo.FindByUserAndOrg(c.Request.Context(), objUserID, org.ID)
+		if err != nil || membership == nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not a member of this organization"})
+			return
+		}
 
-// 		// System admin bypass
-// 		if claims.SystemRole == string(domain.RoleSystemAdmin) {
-// 			c.Next()
-// 			return
-// 		}
+		c.Set(CtxKeyOrgID, org.ID.Hex())
+		c.Set(CtxKeyMembership, membership)
+		c.Next()
+	}
+}
 
-// 		// Check org-level permission
-// 		orgID := c.GetString(CtxKeyOrgID)
-// 		if orgID != "" {
-// 			for _, org := range claims.Orgs {
-// 				if org.OrgID == orgID {
-// 					if hasPermission(domain.RoleID(org.Role), perm) {
-// 						c.Next()
-// 						return
-// 					}
+// RequirePermission checks if the user has a specific permission
+func RequirePermission(perm domain.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := c.MustGet(CtxKeyClaims).(*jwt.Claims)
 
-// 					// Check team-level if team context
-// 					teamID := c.GetString(CtxKeyTeamID)
-// 					if teamID != "" {
-// 						if teamRole, ok := org.TeamRoles[teamID]; ok {
-// 							if hasPermission(domain.RoleID(teamRole), perm) {
-// 								c.Next()
-// 								return
-// 							}
-// 						}
-// 					}
-// 				}
-// 			}
-// 		}
+		// System admin bypass
+		if claims.SystemRole == string(domain.RoleSystemAdmin) {
+			c.Next()
+			return
+		}
 
-// 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
-// 	}
-// }
+		orgID := c.GetString(CtxKeyOrgID)
+		if orgID == "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "organization context required"})
+			return
+		}
 
-// func hasPermission(roleID domain.RoleID, perm domain.Permission) bool {
-// 	perms, ok := domain.RolePermissions[roleID]
-// 	if !ok {
-// 		return false
-// 	}
-// 	for _, p := range perms {
-// 		if p == perm {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
+		for _, org := range claims.Orgs {
+			if org.OrgID == orgID {
+				if utils.HasPermission(domain.RoleID(org.Role), perm) {
+					c.Next()
+					return
+				}
+
+				teamID := c.GetString(CtxKeyTeamID)
+				if teamID != "" {
+					if teamRole, ok := org.TeamRoles[teamID]; ok {
+						if utils.HasPermission(domain.RoleID(teamRole), perm) {
+							c.Next()
+							return
+						}
+					}
+				}
+			}
+		}
+
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
+	}
+}

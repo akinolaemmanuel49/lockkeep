@@ -6,9 +6,8 @@ import (
 	"strings"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
-	auth_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/auth"
-	user_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/user"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,9 +32,9 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 	user, tokens, isNewUser, err := h.authService.OAuth(c.Request.Context(), accessToken)
 	if err != nil {
 		switch {
-		case errors.Is(err, auth_errors.ErrOAuthEmailRequired):
+		case errors.Is(err, services.ErrOAuthEmailRequired):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		case errors.Is(err, user_errors.ErrEmailTaken):
+		case errors.Is(err, services.ErrEmailTaken):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
@@ -70,7 +69,7 @@ func (h *AuthHandler) Register(ctx *gin.Context) {
 
 	user, err := h.authService.Register(ctx.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, user_errors.ErrEmailTaken) {
+		if errors.Is(err, services.ErrEmailTaken) {
 			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
@@ -93,7 +92,7 @@ func (h *AuthHandler) Login(ctx *gin.Context) {
 
 	user, tokens, err := h.authService.Login(ctx.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, auth_errors.ErrInvalidCredentials) {
+		if errors.Is(err, services.ErrInvalidCredentials) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}

@@ -6,8 +6,7 @@ import (
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
-	user_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/user"
-	"github.com/akinolaemmanuel49/lockkeep-backend/internal/service"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/tests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -15,20 +14,20 @@ import (
 )
 
 // Test Setup
-func newTestUserService() (*service.UserService, *mocks.MockUserRepository) {
+func newTestUserService() (*services.UserService, *mocks.MockUserRepository) {
 	cfg := &config.Config{}
 
 	userRepo := new(mocks.MockUserRepository)
 
-	svc := service.NewUserService(cfg, userRepo)
+	svc := services.NewUserService(cfg, userRepo)
 
 	return svc, userRepo
 }
 
 func TestUserService_Me(t *testing.T) {
-	svc, userRepo := newTestUserService()
-
 	t.Run("success", func(t *testing.T) {
+		svc, userRepo := newTestUserService()
+
 		user := &domain.User{ID: bson.NewObjectID(), Email: "me@example.com"}
 
 		userRepo.On("FindByID", mock.Anything, user.ID).Return(user, nil).Once()
@@ -41,15 +40,19 @@ func TestUserService_Me(t *testing.T) {
 	})
 
 	t.Run("invalid user id", func(t *testing.T) {
+		svc, _ := newTestUserService()
+
 		_, err := svc.Me(context.Background(), "not-a-valid-id")
 		assert.Error(t, err)
 	})
 
 	t.Run("user not found", func(t *testing.T) {
+		svc, userRepo := newTestUserService()
+
 		userID := bson.NewObjectID()
 		userRepo.On("FindByID", mock.Anything, userID).Return(nil, nil).Once()
 
 		_, err := svc.Me(context.Background(), userID.Hex())
-		assert.ErrorIs(t, err, user_errors.ErrUserNotFound)
+		assert.ErrorIs(t, err, services.ErrUserNotFound)
 	})
 }

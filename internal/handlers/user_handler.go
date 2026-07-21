@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	user_errors "github.com/akinolaemmanuel49/lockkeep-backend/internal/errors/user"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +27,7 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 
 	user, err := h.userService.Me(c.Request.Context(), userID.(string))
 	if err != nil {
-		if errors.Is(err, user_errors.ErrUserNotFound) {
+		if errors.Is(err, services.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}

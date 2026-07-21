@@ -1,3 +1,4 @@
+// internal/tests/auth_handler_test.go
 package tests
 
 import (
