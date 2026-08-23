@@ -17,6 +17,7 @@ type AuthService interface {
 
 type UserService interface {
 	Me(ctx context.Context, userID string) (*domain.User, error)
+	Update(ctx context.Context, userID string, input dto.UpdateUserProfileRequestDTO) (*domain.User, error)
 }
 
 type OrganizationService interface {

@@ -70,3 +70,8 @@ func (r *userRepository) UpdateEmail(ctx context.Context, userID bson.ObjectID, 
 	})
 	return err
 }
+
+func (r *userRepository) UpdateProfile(ctx context.Context, userID bson.ObjectID, update domain.User) error {
+	_, err := r.coll.Replace(ctx, userID, update)
+	return err
+}

@@ -52,3 +52,8 @@ func (m *MockUserRepository) UpdateEmail(ctx context.Context, userID bson.Object
 	args := m.Called(ctx, userID, email)
 	return args.Error(0)
 }
+
+func (m *MockUserRepository) UpdateProfile(ctx context.Context, userID bson.ObjectID, update domain.User) error {
+	args := m.Called(ctx, userID, update)
+	return args.Error(0)
+}

@@ -1,5 +1,5 @@
 services:
-  server:
+  serverV2:
     image: lockkeep-server:v2
     labels:
       - "traefik.http.routers.lockkeep-server.rule=Host(`api.lockkeep.localhost`)"

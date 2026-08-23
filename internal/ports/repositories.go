@@ -20,6 +20,7 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id bson.ObjectID) (*domain.User, error)
 	UpdateVaultMetadata(ctx context.Context, userID bson.ObjectID, vault domain.VaultMetadata) error
 	UpdateEmail(ctx context.Context, userID bson.ObjectID, email string) error
+	UpdateProfile(ctx context.Context, userID bson.ObjectID, update domain.User) error
 }
 
 type IdentityRepository interface {

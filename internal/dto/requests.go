@@ -62,6 +62,11 @@ type OauthAuthorizeDTO struct {
 	Username   string            `json:"username" binding:"required"`
 }
 
+type UpdateUserProfileRequestDTO struct {
+	Username  *string `json:"username,omitempty"`
+	AvatarURL *string `json:"avatarUrl,omitempty"`
+}
+
 type VerifyVaultPasswordRequest struct {
 	VerificationHash string `json:"verification_hash" binding:"required"`
 }

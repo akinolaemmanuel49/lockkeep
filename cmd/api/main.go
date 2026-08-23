@@ -106,6 +106,7 @@ func main() {
 	user.Use(authMiddleware)
 	{
 		user.GET("/me", userHandler.GetMe)
+		user.PATCH("/me", userHandler.UpdateProfile)
 		// PATCH /me — update profile
 		// GET /me/vault — personal vault metadata
 		// etc.

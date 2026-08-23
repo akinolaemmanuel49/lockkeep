@@ -31,4 +31,5 @@ var (
 var (
 	ErrEntityHasNoRoles      = errors.New("no role(s) found")
 	ErrEntityHasInvalidRoles = errors.New("invalid role(s)")
+	ErrInvalidProfileUpdate  = errors.New("username or avatar URL must be provided")
 )
