@@ -1,0 +1,17 @@
+services:
+  serverV2:
+    image: lockkeep-server:v2
+    labels:
+      - "traefik.http.routers.lockkeep-server.rule=Host(`api.lockkeep.localhost`)"
+      - "traefik.http.services.lockkeep-server.loadbalancer.server.port=8000"
+    # restart: always
+    ports:
+      - 8000:8000
+    env_file:
+      - .env
+    networks:
+      - lockkeep-network
+
+networks:
+  lockkeep-network:
+    external: true
