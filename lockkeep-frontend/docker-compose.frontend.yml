@@ -1,0 +1,14 @@
+services:
+  frontend:
+    image: lockkeep-ui
+    labels:
+      - "traefik.http.routers.lockkeep-ui.rule=Host(`lockkeep.localhost`)"
+      - "traefik.http.services.lockkeep-ui.loadbalancer.server.port=3000"
+    env_file:
+      - .env
+    networks:
+      - lockkeep-network
+
+networks:
+  lockkeep-network:
+    external: true
