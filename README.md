@@ -4,6 +4,8 @@
 
 LockKeep is a self-hosted, zero-knowledge secrets manager built with security-first principles. It encrypts all vault items client-side, supports modern KDF algorithms (scrypt, Argon2id), and automatically migrates secrets to match your organization's current crypto policy.
 
+> **Monorepo layout** — this repository contains both the backend (`lockkeep-backend/`, Go + Gin) and the frontend (`lockkeep-frontend/`, React Router + Vite), with their full commit histories merged in. There are no git submodules.
+
 ---
 
 ## Features
@@ -13,6 +15,7 @@ LockKeep is a self-hosted, zero-knowledge secrets manager built with security-fi
 - **Modern KDF Support** — Pluggable key derivation: `scrypt` and `argon2id`.
 - **OAuth2 Authentication** — Managed via Auth0 with JWT access tokens (session storage) and refresh tokens (HTTP-only cookies).
 - **Production-Ready Infrastructure** — Docker containerization, Traefik load balancing, and MongoDB replica sets for high availability.
+- **Organizations & Shared Secrets (in progress)** — Org/team RBAC, server-managed shared secrets (KMS-backed), and machine-to-machine *environment-var injection* with secrets decrypted on the client. See [PLAN-ORGANIZATIONS.md](./PLAN-ORGANIZATIONS.md).
 
 ---
 
@@ -70,7 +73,7 @@ docker network create lockkeep-network
 
 ### 2. Configure Environment Variables
 
-**Backend** (`.env` in server directory):
+**Backend** (`.env` in `lockkeep-backend/`):
 
 ```env
 PORT=8000
@@ -84,7 +87,7 @@ AUTH0_CLIENT_SECRET=your-auth0-client-secret
 AUTH0_REDIRECT_URI=http://localhost:5173/callback
 ```
 
-**Frontend** (`.env` in frontend directory):
+**Frontend** (`.env` in `lockkeep-frontend/`):
 
 ```env
 AUTH0_DOMAIN=your-auth0-domain.auth0.com
@@ -120,11 +123,11 @@ rs.initiate({
 
 ### 4. Start the Application
 
-**Backend** (with optional scaling):
+**Backend** (with optional scaling; run from `lockkeep-backend/`):
 
 ```bash
 # Build image
-docker build . -t lockkeep-server:latest
+docker build -t lockkeep-server:latest .
 # Single instance
 docker compose -f docker-compose.server.yml up -d
 
@@ -132,11 +135,11 @@ docker compose -f docker-compose.server.yml up -d
 docker compose -f docker-compose.server.yml up -d --scale server=3
 ```
 
-**Frontend:**
+**Frontend** (run from `lockkeep-frontend/`):
 
 ```bash
 # Build image
-docker build . -t lockkeep-ui:latest
+docker build -t lockkeep-ui:latest .
 
 docker compose -f docker-compose.frontend.yml up -d
 ```
@@ -346,7 +349,7 @@ Supported KDFs:
 ### Backend
 
 ```bash
-cd server
+cd lockkeep-backend
 go mod download
 go run ./cmd/api
 ```
@@ -354,7 +357,26 @@ go run ./cmd/api
 ### Frontend
 
 ```bash
-cd frontend
+cd lockkeep-frontend
 npm install
 npm run dev
 ```
+
+---
+
+## Roadmap: Organizations & Shared Secrets
+
+LockKeep is expanding from a single-user password vault to an organization-level
+secrets platform with **environment-variable injection** for machines and CI.
+The implementation plan — including the current zero-knowledge MVP assessment,
+the two shared-secret modes (server-managed and client-decrypted), the machine
+identity/API-key model, and the phased roadmap — lives in
+[`PLAN-ORGANIZATIONS.md`](./PLAN-ORGANIZATIONS.md).
+
+Current status:
+
+- [x] Merge backend + frontend into a single repo (no submodules)
+- [~] Org/team RBAC scaffolding (services, tests, middleware)
+- [ ] Shared secrets (server-managed, KMS-backed)
+- [ ] Service accounts, applications, environments, env-var injection
+- [ ] Personal vault refactor on the new `/api/v2` route surface

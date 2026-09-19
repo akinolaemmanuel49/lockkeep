@@ -23,9 +23,9 @@ func setupUserRouter(mockService *mocks.MockUserService) *gin.Engine {
 
 	// User routes
 	v2 := r.Group("/api/v2")
-	user := v2.Group("/user")
-	user.Use(mocks.MockAuthMiddleware())
-	user.GET("/me", h.GetMe)
+	me := v2.Group("/me")
+	me.Use(mocks.MockAuthMiddleware())
+	me.GET("", h.GetMe)
 
 	return r
 }
@@ -39,10 +39,10 @@ func TestUserHandler_GetMe(t *testing.T) {
 		Email: "me@example.com",
 	}
 
-	mockSvc.On("Me", mock.Anything, mocks.SampleObjectIDHex).
+	mockSvc.On("GetUser", mock.Anything, mocks.SampleObjectIDHex).
 		Return(user, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/user/me", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/me", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

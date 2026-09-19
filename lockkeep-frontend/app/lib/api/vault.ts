@@ -5,7 +5,7 @@ import { authFetch } from "./core";
 export async function verifyVaultPassword(
     verificationHash: string,
 ): Promise<{ success: boolean; credentials: VaultItem[] }> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/verify`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ verification_hash: verificationHash }),
@@ -22,7 +22,7 @@ export async function verifyVaultPassword(
 export async function createVaultItem(
     item: CreateVaultItemRequest,
 ): Promise<VaultItem> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(item),
@@ -37,7 +37,7 @@ export async function createVaultItem(
 }
 
 export async function fetchVaultItems(): Promise<VaultItem[]> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/items`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items`, {
         method: "GET",
     });
 
@@ -54,7 +54,7 @@ export async function updateVaultItem(
     updates: UpdateVaultItemRequest,
     updatePolicy?: boolean,
 ): Promise<VaultItem> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item/${itemId}?updatePolicy=${updatePolicy === true}`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items/${itemId}?updatePolicy=${updatePolicy === true}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -69,7 +69,7 @@ export async function updateVaultItem(
 }
 
 export async function deleteVaultItem(itemId: string): Promise<void> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/vault/item/${itemId}`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items/${itemId}`, {
         method: "DELETE",
     });
 
@@ -83,7 +83,7 @@ export async function updateVaultPassword(
     newVerificationHash: string,
     newKdfParams: KDFParams,
 ): Promise<void> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/auth/vault/update`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/setup`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

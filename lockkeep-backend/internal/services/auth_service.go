@@ -359,3 +359,146 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 	claims := s.buildClaims(ctx, user)
 	return s.jwtManager.GeneratePair(claims)
 }
+
+// SetVerificationHash stores the client-derived vault verification hash and
+// KDF parameters on the user's vault metadata. Zero-knowledge: the server
+// never sees the master key, only the verification hash the client derives.
+func (s *AuthService) SetVerificationHash(ctx context.Context, userID bson.ObjectID, req dto.SetVerificationHashRequest) (*domain.User, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	version := uint32(1)
+	if user.Vault != nil && user.Vault.Version > 0 {
+		version = user.Vault.Version
+	}
+
+	user.Vault = &domain.VaultMetadata{
+		Version:          version,
+		VerificationHash: req.VerificationHash,
+		KDF: domain.KDFParams{
+			Algorithm:   req.KDFParams.Algorithm,
+			Salt:        req.KDFParams.Salt,
+			Memory:      req.KDFParams.Memory,
+			Iterations:  req.KDFParams.Iterations,
+			Parallelism: req.KDFParams.Parallelism,
+		},
+	}
+
+	if err := s.userRepo.UpdateVaultMetadata(ctx, userID, *user.Vault); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// GetKDFParams returns the KDF parameters stored for the user's vault so the
+// client can re-derive the master key for a given password.
+func (s *AuthService) GetKDFParams(ctx context.Context, userID bson.ObjectID) (*domain.KDFParams, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	if user.Vault == nil || user.Vault.KDF.Salt == "" {
+		return nil, ErrVaultNotFound
+	}
+
+	return &user.Vault.KDF, nil
+}
+
+// UpdateEmail changes the account email and re-issues tokens, since email is a
+// JWT claim. Only required for users with a local identity; OAuth-only users
+// must manage their email at the provider.
+func (s *AuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*domain.User, *dto.TokenPair, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if user == nil {
+		return nil, nil, ErrUserNotFound
+	}
+
+	identities, err := s.identityRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !hasLocalIdentity(identities) {
+		return nil, nil, ErrCannotEditOAuth
+	}
+
+	exists, err := s.userRepo.EmailExists(ctx, req.Email)
+	if err != nil {
+		return nil, nil, err
+	}
+	if exists && req.Email != user.Email {
+		return nil, nil, ErrEmailInUse
+	}
+
+	if err := s.userRepo.UpdateEmail(ctx, userID, req.Email); err != nil {
+		return nil, nil, err
+	}
+
+	user.Email = req.Email
+	claims := s.buildClaims(ctx, user)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, tokens, nil
+}
+
+// UpdateAccountPassword validates the current password against the local
+// identity and installs a new bcrypt hash.
+func (s *AuthService) UpdateAccountPassword(ctx context.Context, userID bson.ObjectID, req dto.UpdateAccountPasswordRequest) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	identities, err := s.identityRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	var localIdentity *domain.Identity
+	for i := range identities {
+		if identities[i].AuthMethod == domain.AuthMethodLocal {
+			localIdentity = &identities[i]
+			break
+		}
+	}
+	if localIdentity == nil {
+		return ErrCannotEditOAuth
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(localIdentity.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		return ErrInvalidPassword
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.identityRepo.UpdatePassword(ctx, userID, string(hash))
+}
+
+func hasLocalIdentity(identities []domain.Identity) bool {
+	for i := range identities {
+		if identities[i].AuthMethod == domain.AuthMethodLocal {
+			return true
+		}
+	}
+	return false
+}

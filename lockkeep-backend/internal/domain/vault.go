@@ -43,3 +43,16 @@ type VaultMetadata struct {
 	VerificationHash string    `bson:"verification_hash" json:"verificationHash"`
 	KDF              KDFParams `bson:"kdf" json:"kdf"`
 }
+
+// Vault — personal vault profile, one per user. Holds client-facing display
+// settings. Encryption metadata (KDF params, verification hash, policy
+// version) is owned by the auth/vault-setup flows.
+type Vault struct {
+	ID        bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    bson.ObjectID `bson:"user_id" json:"userId"`
+	Vaultname string        `bson:"vaultname" json:"vaultname"`
+	AvatarURL *string       `bson:"avatar_url,omitempty" json:"avatarUrl,omitempty"`
+
+	CreatedAt time.Time `bson:"created_at" json:"createdAt"`
+	UpdatedAt time.Time `bson:"updated_at" json:"updatedAt"`
+}

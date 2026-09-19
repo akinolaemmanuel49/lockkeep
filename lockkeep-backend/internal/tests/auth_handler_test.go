@@ -10,6 +10,7 @@ import (
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/tests/mocks"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,118 @@ func setupAuthRouter(mockService *mocks.MockAuthService) *gin.Engine {
 	auth.POST("/oauth", h.OAuth)
 	auth.POST("/refresh", h.Refresh)
 
+	// Authenticated account + vault-setup routes
+	me := v2.Group("/me")
+	me.Use(mocks.MockAuthMiddleware())
+	{
+		me.POST("/email", h.UpdateEmail)
+		me.POST("/password", h.UpdateAccountPassword)
+		me.POST("/vault/setup", h.SetVerificationHash)
+		me.PUT("/vault/setup", h.SetVerificationHash)
+		me.GET("/vault/kdfparams", h.GetKDFParams)
+	}
+
 	return r
+}
+
+func TestAuthHandler_SetVerificationHash(t *testing.T) {
+	mockSvc := new(mocks.MockAuthService)
+	router := setupAuthRouter(mockSvc)
+
+	user := &domain.User{ID: mocks.MustObjectID(mocks.SampleObjectIDHex), Email: "vault@example.com"}
+
+	mockSvc.On("SetVerificationHash", mock.Anything, mocks.MustObjectID(mocks.SampleObjectIDHex),
+		mock.AnythingOfType("dto.SetVerificationHashRequest")).Return(user, nil).Once()
+
+	body := `{"verification_hash":"hash123","kdf_params":{"algorithm":"scrypt","salt":"salt","memory":128,"iterations":17,"parallelism":1}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/me/vault/setup", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "vault@example.com")
+	mockSvc.AssertExpectations(t)
+}
+
+func TestAuthHandler_GetKDFParams(t *testing.T) {
+	mockSvc := new(mocks.MockAuthService)
+	router := setupAuthRouter(mockSvc)
+
+	kdf := &domain.KDFParams{Algorithm: "scrypt", Salt: "salt", Memory: 128, Iterations: 17, Parallelism: 1}
+
+	mockSvc.On("GetKDFParams", mock.Anything, mocks.MustObjectID(mocks.SampleObjectIDHex)).Return(kdf, nil).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/me/vault/kdfparams", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"algorithm":"scrypt"`)
+	assert.Contains(t, w.Body.String(), `"salt":"salt"`)
+	mockSvc.AssertExpectations(t)
+}
+
+func TestAuthHandler_UpdateEmail(t *testing.T) {
+	mockSvc := new(mocks.MockAuthService)
+	router := setupAuthRouter(mockSvc)
+
+	user := &domain.User{ID: mocks.MustObjectID(mocks.SampleObjectIDHex), Email: "new@example.com"}
+	tokens := &dto.TokenPair{AccessToken: "access.token", RefreshToken: "refresh.token"}
+
+	mockSvc.On("UpdateEmail", mock.Anything, mocks.MustObjectID(mocks.SampleObjectIDHex),
+		mock.AnythingOfType("dto.UpdateEmailRequest")).Return(user, tokens, nil).Once()
+
+	body := `{"email":"new@example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/me/email", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "access_token")
+	mockSvc.AssertExpectations(t)
+}
+
+func TestAuthHandler_UpdateAccountPassword(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mockSvc := new(mocks.MockAuthService)
+		router := setupAuthRouter(mockSvc)
+
+		mockSvc.On("UpdateAccountPassword", mock.Anything, mocks.MustObjectID(mocks.SampleObjectIDHex),
+			mock.AnythingOfType("dto.UpdateAccountPasswordRequest")).Return(nil).Once()
+
+		body := `{"currentPassword":"old-pass","newPassword":"new-pass-123"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/me/password", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "password successfully updated")
+		mockSvc.AssertExpectations(t)
+	})
+
+	t.Run("invalid current password", func(t *testing.T) {
+		mockSvc := new(mocks.MockAuthService)
+		router := setupAuthRouter(mockSvc)
+
+		mockSvc.On("UpdateAccountPassword", mock.Anything, mocks.MustObjectID(mocks.SampleObjectIDHex),
+			mock.AnythingOfType("dto.UpdateAccountPasswordRequest")).Return(services.ErrInvalidPassword).Once()
+
+		body := `{"currentPassword":"wrong","newPassword":"new-pass-123"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/me/password", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		mockSvc.AssertExpectations(t)
+	})
 }
 
 func TestAuthHandler_Register(t *testing.T) {

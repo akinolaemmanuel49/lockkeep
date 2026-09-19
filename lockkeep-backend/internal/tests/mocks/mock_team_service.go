@@ -15,19 +15,39 @@ type MockTeamService struct {
 
 var _ ports.TeamService = (*MockTeamService)(nil)
 
-func (m *MockTeamService) Create(ctx context.Context, userID bson.ObjectID, orgID bson.ObjectID, name, slug string) (*domain.Team, error) {
+func (m *MockTeamService) CreateTeam(ctx context.Context, userID bson.ObjectID, orgID bson.ObjectID, name, slug string) (*domain.Team, error) {
 	args := m.Called(ctx, userID, orgID, name, slug)
-	return args.Get(0).(*domain.Team), args.Error(1)
+	if v := args.Get(0); v != nil {
+		return v.(*domain.Team), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
-func (m *MockTeamService) GetBySlug(ctx context.Context, orgID bson.ObjectID, slug string) (*domain.Team, error) {
+
+func (m *MockTeamService) GetTeamBySlug(ctx context.Context, orgID bson.ObjectID, slug string) (*domain.Team, error) {
 	args := m.Called(ctx, orgID, slug)
-	return args.Get(0).(*domain.Team), args.Error(1)
+	if v := args.Get(0); v != nil {
+		return v.(*domain.Team), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
-func (m *MockTeamService) ListByOrganization(ctx context.Context, orgID bson.ObjectID) ([]domain.Team, error) {
+
+func (m *MockTeamService) ListTeamsByOrganization(ctx context.Context, orgID bson.ObjectID) ([]domain.Team, error) {
 	args := m.Called(ctx, orgID)
-	return args.Get(0).([]domain.Team), args.Error(1)
+	if v := args.Get(0); v != nil {
+		return v.([]domain.Team), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
-func (m *MockTeamService) Delete(ctx context.Context, userID bson.ObjectID, orgID bson.ObjectID, teamID bson.ObjectID) error {
-	args := m.Called(ctx, userID, orgID, teamID)
+
+func (m *MockTeamService) UpdateTeam(ctx context.Context, orgID bson.ObjectID, teamID bson.ObjectID) (*domain.Team, error) {
+	args := m.Called(ctx, orgID, teamID)
+	if v := args.Get(0); v != nil {
+		return v.(*domain.Team), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockTeamService) DeleteTeams(ctx context.Context, userID bson.ObjectID, orgID bson.ObjectID, teamIDs []bson.ObjectID) error {
+	args := m.Called(ctx, userID, orgID, teamIDs)
 	return args.Error(0)
 }

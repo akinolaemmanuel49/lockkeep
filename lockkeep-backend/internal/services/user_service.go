@@ -20,7 +20,7 @@ func NewUserService(cfg *config.Config, userRepo ports.UserRepository) *UserServ
 	return &UserService{cfg: cfg, userRepo: userRepo}
 }
 
-func (s *UserService) Me(ctx context.Context, userID string) (*domain.User, error) {
+func (s *UserService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
 	objID, err := bson.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (s *UserService) Me(ctx context.Context, userID string) (*domain.User, erro
 	return user, nil
 }
 
-func (s *UserService) Update(ctx context.Context, userID string, input dto.UpdateUserProfileRequestDTO) (*domain.User, error) {
+func (s *UserService) UpdateUser(ctx context.Context, userID string, input dto.UpdateUserProfileRequestDTO) (*domain.User, error) {
 	objID, err := bson.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, err

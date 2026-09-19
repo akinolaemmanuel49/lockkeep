@@ -26,7 +26,7 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.Me(c.Request.Context(), userID.(string))
+	user, err := h.userService.GetUser(c.Request.Context(), userID.(string))
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -55,7 +55,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.Update(c.Request.Context(), userID.(string), req)
+	user, err := h.userService.UpdateUser(c.Request.Context(), userID.(string), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrUserNotFound):

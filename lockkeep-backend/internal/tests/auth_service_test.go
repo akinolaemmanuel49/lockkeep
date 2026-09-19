@@ -232,3 +232,207 @@ func TestAuthService_Refresh(t *testing.T) {
 func TestAuthService_OAuth(t *testing.T) {
 	t.Skip("OAuth requires Auth0 HTTP client abstraction — add ports.OAuthProvider interface")
 }
+
+func TestAuthService_SetVerificationHash(t *testing.T) {
+	userID := bson.NewObjectID()
+
+	t.Run("success", func(t *testing.T) {
+		svc, userRepo, _, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "vault@example.com"}
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+
+		var stored domain.VaultMetadata
+		userRepo.On("UpdateVaultMetadata", mock.Anything, userID, mock.MatchedBy(func(v domain.VaultMetadata) bool {
+			stored = v
+			return v.VerificationHash == "hash123" && v.KDF.Algorithm == "scrypt" && v.KDF.Salt == "salt" && v.Version == 1
+		})).Return(nil).Once()
+
+		req := dto.SetVerificationHashRequest{
+			VerificationHash: "hash123",
+			KDFParams: dto.KDFDTO{
+				Algorithm:   "scrypt",
+				Salt:        "salt",
+				Memory:      128,
+				Iterations:  17,
+				Parallelism: 1,
+			},
+		}
+
+		result, err := svc.SetVerificationHash(context.Background(), userID, req)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, "hash123", stored.VerificationHash)
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		svc, userRepo, _, _, _, _ := newTestAuthService()
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(nil, nil).Once()
+
+		_, err := svc.SetVerificationHash(context.Background(), userID, dto.SetVerificationHashRequest{})
+		assert.ErrorIs(t, err, services.ErrUserNotFound)
+	})
+}
+
+func TestAuthService_GetKDFParams(t *testing.T) {
+	userID := bson.NewObjectID()
+
+	t.Run("success", func(t *testing.T) {
+		svc, userRepo, _, _, _, _ := newTestAuthService()
+
+		user := &domain.User{
+			ID: userID,
+			Vault: &domain.VaultMetadata{
+				Version:          1,
+				VerificationHash: "hash",
+				KDF: domain.KDFParams{
+					Algorithm:   "argon2id",
+					Salt:        "somesalt",
+					Memory:      65536,
+					Iterations:  3,
+					Parallelism: 4,
+				},
+			},
+		}
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+
+		kdf, err := svc.GetKDFParams(context.Background(), userID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "argon2id", kdf.Algorithm)
+		assert.Equal(t, "somesalt", kdf.Salt)
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("vault not set up", func(t *testing.T) {
+		svc, userRepo, _, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID}
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+
+		_, err := svc.GetKDFParams(context.Background(), userID)
+		assert.ErrorIs(t, err, services.ErrVaultNotFound)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		svc, userRepo, _, _, _, _ := newTestAuthService()
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(nil, nil).Once()
+
+		_, err := svc.GetKDFParams(context.Background(), userID)
+		assert.ErrorIs(t, err, services.ErrUserNotFound)
+	})
+}
+
+func TestAuthService_UpdateEmail(t *testing.T) {
+	userID := bson.NewObjectID()
+
+	t.Run("success", func(t *testing.T) {
+		svc, userRepo, identityRepo, membershipRepo, _, jwtManager := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "old@example.com"}
+		identity := domain.Identity{ID: bson.NewObjectID(), UserID: userID, AuthMethod: domain.AuthMethodLocal}
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		identityRepo.On("FindByUserID", mock.Anything, userID).Return([]domain.Identity{identity}, nil).Once()
+		userRepo.On("EmailExists", mock.Anything, "new@example.com").Return(false, nil).Once()
+		userRepo.On("UpdateEmail", mock.Anything, userID, "new@example.com").Return(nil).Once()
+		membershipRepo.On("FindByUser", mock.Anything, userID).Return([]domain.Membership{}, nil).Once()
+		jwtManager.On("GeneratePair", mock.Anything).Return(&dto.TokenPair{AccessToken: "new.acc", RefreshToken: "new.ref"}, nil).Once()
+
+		result, tokens, err := svc.UpdateEmail(context.Background(), userID, dto.UpdateEmailRequest{Email: "new@example.com"})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "new@example.com", result.Email)
+		assert.Equal(t, "new.acc", tokens.AccessToken)
+		userRepo.AssertExpectations(t)
+		identityRepo.AssertExpectations(t)
+		membershipRepo.AssertExpectations(t)
+		jwtManager.AssertExpectations(t)
+	})
+
+	t.Run("email already in use", func(t *testing.T) {
+		svc, userRepo, identityRepo, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "old@example.com"}
+		identity := domain.Identity{ID: bson.NewObjectID(), UserID: userID, AuthMethod: domain.AuthMethodLocal}
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		identityRepo.On("FindByUserID", mock.Anything, userID).Return([]domain.Identity{identity}, nil).Once()
+		userRepo.On("EmailExists", mock.Anything, "taken@example.com").Return(true, nil).Once()
+
+		_, _, err := svc.UpdateEmail(context.Background(), userID, dto.UpdateEmailRequest{Email: "taken@example.com"})
+		assert.ErrorIs(t, err, services.ErrEmailInUse)
+	})
+
+	t.Run("oauth only user rejected", func(t *testing.T) {
+		svc, userRepo, identityRepo, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "old@example.com"}
+		identity := domain.Identity{ID: bson.NewObjectID(), UserID: userID, AuthMethod: domain.AuthMethodGoogle}
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		identityRepo.On("FindByUserID", mock.Anything, userID).Return([]domain.Identity{identity}, nil).Once()
+
+		_, _, err := svc.UpdateEmail(context.Background(), userID, dto.UpdateEmailRequest{Email: "new@example.com"})
+		assert.ErrorIs(t, err, services.ErrCannotEditOAuth)
+	})
+}
+
+func TestAuthService_UpdateAccountPassword(t *testing.T) {
+	userID := bson.NewObjectID()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("correct-password"), bcrypt.DefaultCost)
+
+	t.Run("success", func(t *testing.T) {
+		svc, userRepo, identityRepo, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "pw@example.com"}
+		identity := domain.Identity{ID: bson.NewObjectID(), UserID: userID, AuthMethod: domain.AuthMethodLocal, PasswordHash: string(hash)}
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		identityRepo.On("FindByUserID", mock.Anything, userID).Return([]domain.Identity{identity}, nil).Once()
+		identityRepo.On("UpdatePassword", mock.Anything, userID, mock.AnythingOfType("string")).Return(nil).Once()
+
+		err := svc.UpdateAccountPassword(context.Background(), userID, dto.UpdateAccountPasswordRequest{
+			CurrentPassword: "correct-password",
+			NewPassword:     "new-password-123",
+		})
+
+		assert.NoError(t, err)
+		userRepo.AssertExpectations(t)
+		identityRepo.AssertExpectations(t)
+	})
+
+	t.Run("wrong current password", func(t *testing.T) {
+		svc, userRepo, identityRepo, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "pw@example.com"}
+		identity := domain.Identity{ID: bson.NewObjectID(), UserID: userID, AuthMethod: domain.AuthMethodLocal, PasswordHash: string(hash)}
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		identityRepo.On("FindByUserID", mock.Anything, userID).Return([]domain.Identity{identity}, nil).Once()
+
+		err := svc.UpdateAccountPassword(context.Background(), userID, dto.UpdateAccountPasswordRequest{
+			CurrentPassword: "wrong-password",
+			NewPassword:     "new-password-123",
+		})
+
+		assert.ErrorIs(t, err, services.ErrInvalidPassword)
+	})
+
+	t.Run("oauth only user rejected", func(t *testing.T) {
+		svc, userRepo, identityRepo, _, _, _ := newTestAuthService()
+
+		user := &domain.User{ID: userID, Email: "pw@example.com"}
+		identity := domain.Identity{ID: bson.NewObjectID(), UserID: userID, AuthMethod: domain.AuthMethodGoogle}
+
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		identityRepo.On("FindByUserID", mock.Anything, userID).Return([]domain.Identity{identity}, nil).Once()
+
+		err := svc.UpdateAccountPassword(context.Background(), userID, dto.UpdateAccountPasswordRequest{})
+		assert.ErrorIs(t, err, services.ErrCannotEditOAuth)
+	})
+}

@@ -15,12 +15,12 @@ type MockUserService struct {
 
 var _ ports.UserService = (*MockUserService)(nil)
 
-func (m *MockUserService) Me(ctx context.Context, userID string) (*domain.User, error) {
+func (m *MockUserService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
 	args := m.Called(ctx, userID)
 	return args.Get(0).(*domain.User), args.Error(1)
 }
 
-func (m *MockUserService) Update(ctx context.Context, userID string, input dto.UpdateUserProfileRequestDTO) (*domain.User, error) {
+func (m *MockUserService) UpdateUser(ctx context.Context, userID string, input dto.UpdateUserProfileRequestDTO) (*domain.User, error) {
 	args := m.Called(ctx, userID, input)
 	return args.Get(0).(*domain.User), args.Error(1)
 }

@@ -45,7 +45,7 @@ func (h *TeamHandler) Create(c *gin.Context) {
 		return
 	}
 
-	team, err := h.teamService.Create(c.Request.Context(), objUserID, objOrgID, req.Name, req.Slug)
+	team, err := h.teamService.CreateTeam(c.Request.Context(), objUserID, objOrgID, req.Name, req.Slug)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrEntityHasNoRoles):
@@ -75,7 +75,7 @@ func (h *TeamHandler) List(c *gin.Context) {
 		return
 	}
 
-	teams, err := h.teamService.ListByOrganization(c.Request.Context(), objOrgID)
+	teams, err := h.teamService.ListTeamsByOrganization(c.Request.Context(), objOrgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -94,7 +94,7 @@ func (h *TeamHandler) Get(c *gin.Context) {
 		return
 	}
 
-	team, err := h.teamService.GetBySlug(c.Request.Context(), objOrgID, slug)
+	team, err := h.teamService.GetTeamBySlug(c.Request.Context(), objOrgID, slug)
 	if err != nil {
 		if errors.Is(err, services.ErrTeamNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -128,7 +128,7 @@ func (h *TeamHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.teamService.Delete(c.Request.Context(), objUserID, objOrgID, objTeamID); err != nil {
+	if err := h.teamService.DeleteTeams(c.Request.Context(), objUserID, objOrgID, []bson.ObjectID{objTeamID}); err != nil {
 		switch {
 		case errors.Is(err, services.ErrEntityHasNoRoles):
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})

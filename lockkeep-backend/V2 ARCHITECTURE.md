@@ -1,39 +1,40 @@
 ## LockKeep v2 Architecture
 
 ### Core Principle
+
 **Personal secrets: zero-knowledge. Org/team secrets: server-managed with RBAC and audit logging.**
 
 ---
 
 ## Domain Model
 
-| Entity | Responsibility | Storage |
-|--------|---------------|---------|
-| `User` | Profile, personal vault metadata | `users` |
-| `Identity` | Authentication credentials (local, OAuth) | `identities` |
-| `Organization` | Top-level grouping, settings | `organizations` |
-| `Team` | Sub-grouping within org | `teams` |
-| `Membership` | User-org-team-role junction | `memberships` |
-| `Role` | RBAC definitions (system, org, team scopes) | `roles` (seeded) |
-| `VaultItem` | Personal secrets — zero-knowledge | `vault_items` |
-| `SharedSecret` | Org/team secrets — server-managed | `shared_secrets` |
-| `EncryptedKey` | Org/team encryption keys (wrapped by KMS) | `encrypted_keys` |
-| `MasterKeyRef` | External KMS reference | `master_key_refs` |
-| `AuditEvent` | Immutable access log | `audit_events` |
-| `CryptoPolicy` | Platform KDF parameters | `crypto_policies` |
+| Entity         | Responsibility                              | Storage           |
+| -------------- | ------------------------------------------- | ----------------- |
+| `User`         | Profile, personal vault metadata            | `users`           |
+| `Identity`     | Authentication credentials (local, OAuth)   | `identities`      |
+| `Organization` | Top-level grouping, settings                | `organizations`   |
+| `Team`         | Sub-grouping within org                     | `teams`           |
+| `Membership`   | User-org-team-role junction                 | `memberships`     |
+| `Role`         | RBAC definitions (system, org, team scopes) | `roles` (seeded)  |
+| `VaultItem`    | Personal secrets — zero-knowledge           | `vault_items`     |
+| `SharedSecret` | Org/team secrets — server-managed           | `shared_secrets`  |
+| `EncryptedKey` | Org/team encryption keys (wrapped by KMS)   | `encrypted_keys`  |
+| `MasterKeyRef` | External KMS reference                      | `master_key_refs` |
+| `AuditEvent`   | Immutable access log                        | `audit_events`    |
+| `CryptoPolicy` | Platform KDF parameters                     | `crypto_policies` |
 
 ---
 
 ## Security Model Split
 
-| Aspect | Personal Vault | Org/Team Secrets |
-|--------|---------------|------------------|
-| **Encryption** | Client-side (user-derived master key) | Server-side (KMS-backed) |
-| **Key location** | Never leaves client | Stored encrypted, decrypted via KMS |
-| **Server can read?** | **No** | **Yes** — server decrypts to serve |
-| **Recovery** | Impossible if password lost | Org admin can rotate, re-encrypt |
-| **Audit** | Client-reported (optional) | Server-enforced, immutable |
-| **Threat model** | Server compromise, insider | External attacker, accidental leak |
+| Aspect               | Personal Vault                        | Org/Team Secrets                    |
+| -------------------- | ------------------------------------- | ----------------------------------- |
+| **Encryption**       | Client-side (user-derived master key) | Server-side (KMS-backed)            |
+| **Key location**     | Never leaves client                   | Stored encrypted, decrypted via KMS |
+| **Server can read?** | **No**                                | **Yes** — server decrypts to serve  |
+| **Recovery**         | Impossible if password lost           | Org admin can rotate, re-encrypt    |
+| **Audit**            | Client-reported (optional)            | Server-enforced, immutable          |
+| **Threat model**     | Server compromise, insider            | External attacker, accidental leak  |
 
 ---
 
@@ -107,28 +108,28 @@ internal/
 
 ## Repository Contracts (`ports/repository.go`)
 
-| Interface | Methods |
-|-----------|---------|
-| `UserRepository` | `Create`, `FindByEmail`, `EmailExists`, `FindByID`, `UpdateVaultMetadata`, `UpdateEmail` |
-| `IdentityRepository` | `Create`, `FindByUserID`, `FindByOAuth`, `UpdatePassword`, `RecordLogin` |
-| `OrganizationRepository` | `Create`, `FindByID`, `FindBySlug`, `FindByMember`, `Update`, `Delete` |
-| `TeamRepository` | `Create`, `FindByID`, `FindBySlug`, `FindByOrganization`, `Update`, `Delete` |
-| `MembershipRepository` | `Create`, `FindByUserAndOrg`, `FindByUser`, `FindByOrganization`, `UpdateRole`, `UpdateTeamRoles`, `Delete` |
-| `SharedSecretRepository` | `Create`, `FindByID`, `FindByOrganization`, `Update`, `Delete` |
-| `AuditRepository` | `Log`, `FindByResource`, `FindByUser`, `FindByOrganization` |
-| `VaultItemRepository` | `Create`, `FindByUser`, `FindByID`, `Update`, `Delete` |
-| `CryptoPolicyRepository` | `GetCurrent`, `SetCurrent` |
+| Interface                | Methods                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `UserRepository`         | `Create`, `FindByEmail`, `EmailExists`, `FindByID`, `UpdateVaultMetadata`, `UpdateEmail`                    |
+| `IdentityRepository`     | `Create`, `FindByUserID`, `FindByOAuth`, `UpdatePassword`, `RecordLogin`                                    |
+| `OrganizationRepository` | `Create`, `FindByID`, `FindBySlug`, `FindByMember`, `Update`, `Delete`                                      |
+| `TeamRepository`         | `Create`, `FindByID`, `FindBySlug`, `FindByOrganization`, `Update`, `Delete`                                |
+| `MembershipRepository`   | `Create`, `FindByUserAndOrg`, `FindByUser`, `FindByOrganization`, `UpdateRole`, `UpdateTeamRoles`, `Delete` |
+| `SharedSecretRepository` | `Create`, `FindByID`, `FindByOrganization`, `Update`, `Delete`                                              |
+| `AuditRepository`        | `Log`, `FindByResource`, `FindByUser`, `FindByOrganization`                                                 |
+| `VaultItemRepository`    | `Create`, `FindByUser`, `FindByID`, `Update`, `Delete`                                                      |
+| `CryptoPolicyRepository` | `GetCurrent`, `SetCurrent`                                                                                  |
 
 ---
 
 ## Middleware Stack
 
-| Middleware | Applies To | Purpose |
-|------------|-----------|---------|
-| `Auth` | All protected routes | Validate JWT, set `userID` in context |
-| `RequireOrgAccess` | Org-scoped routes | Verify membership, set `orgID`, `membership` |
-| `RequirePermission(perm)` | Specific routes | Check role permissions |
-| `AuditAccess` | Shared secret read routes | Auto-log `AuditEvent` before response |
+| Middleware                | Applies To                | Purpose                                      |
+| ------------------------- | ------------------------- | -------------------------------------------- |
+| `Auth`                    | All protected routes      | Validate JWT, set `userID` in context        |
+| `RequireOrgAccess`        | Org-scoped routes         | Verify membership, set `orgID`, `membership` |
+| `RequirePermission(perm)` | Specific routes           | Check role permissions                       |
+| `AuditAccess`             | Shared secret read routes | Auto-log `AuditEvent` before response        |
 
 ---
 
@@ -144,7 +145,7 @@ internal/
 ├── GET    /me                   → Get own User profile
 ├── PATCH  /me                   → Update profile
 │
-├── GET    /me/vault             → Personal vault metadata
+├── GET    /me/vault             → Personal vault
 ├── POST   /me/vault/items       → Create personal VaultItem
 ├── GET    /me/vault/items       → List personal VaultItems
 ├── GET    /me/vault/items/:id   → Get personal VaultItem
@@ -192,18 +193,18 @@ internal/
 
 ## Key Architectural Decisions
 
-| Decision | Why |
-|----------|-----|
-| **User and Identity separate** | One user can have multiple auth methods; auth concerns don't leak into profile |
-| **No `TenantID` on User** | Users exist independently of orgs; Slack model |
-| **No `UserType` enum** | Replaced by `Role` system with scopes (system, org, team) |
-| **Membership as junction** | Clean many-to-many; one doc per user-org pair |
-| **Team roles nested in Membership** | Avoids separate collection; index `team_roles.team_id` |
-| **Slug-based URLs** | Human-readable, cacheable: `/orgs/acme/teams/engineering` |
-| **Path versioning in one binary** | Simpler ops; `/api/v2/` prefix |
-| **Collection wrapper** | Business language over MongoDB; swappable backend |
-| **Audit auto-logged on secret access** | Immutable, server-enforced; not client-reported |
-| **CryptoPolicy public, mutable only by system admin** | Transparency doesn't hurt security |
+| Decision                                              | Why                                                                            |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **User and Identity separate**                        | One user can have multiple auth methods; auth concerns don't leak into profile |
+| **No `TenantID` on User**                             | Users exist independently of orgs; Slack model                                 |
+| **No `UserType` enum**                                | Replaced by `Role` system with scopes (system, org, team)                      |
+| **Membership as junction**                            | Clean many-to-many; one doc per user-org pair                                  |
+| **Team roles nested in Membership**                   | Avoids separate collection; index `team_roles.team_id`                         |
+| **Slug-based URLs**                                   | Human-readable, cacheable: `/orgs/acme/teams/engineering`                      |
+| **Path versioning in one binary**                     | Simpler ops; `/api/v2/` prefix                                                 |
+| **Collection wrapper**                                | Business language over MongoDB; swappable backend                              |
+| **Audit auto-logged on secret access**                | Immutable, server-enforced; not client-reported                                |
+| **CryptoPolicy public, mutable only by system admin** | Transparency doesn't hurt security                                             |
 
 ---
 
@@ -262,35 +263,35 @@ Key evicted from memory
 
 ## Indexes
 
-| Collection | Index | Purpose |
-|------------|-------|---------|
-| `users` | `email` unique | Login lookup |
-| `users` | `username` unique | Profile uniqueness |
-| `identities` | `user_id` | Find user's auth methods |
-| `identities` | `auth_method + auth_provider_id` partial unique | OAuth deduplication |
-| `memberships` | `user_id + organization_id` unique | One membership per user-org |
-| `memberships` | `organization_id` | List org members |
-| `memberships` | `user_id` | List user's orgs |
-| `memberships` | `team_roles.team_id` | Find team members |
-| `organizations` | `slug` unique | URL lookup |
-| `teams` | `organization_id + slug` unique | Scoped lookup |
-| `shared_secrets` | `organization_id + team_id` | List org/team secrets |
-| `audit_events` | `resource_id + timestamp` desc | Audit queries |
-| `audit_events` | `user_id + timestamp` desc | User history |
-| `audit_events` | `organization_id + timestamp` desc | Org audit |
-| `audit_events` | `timestamp` desc TTL 90d | Auto-expiration |
+| Collection       | Index                                           | Purpose                     |
+| ---------------- | ----------------------------------------------- | --------------------------- |
+| `users`          | `email` unique                                  | Login lookup                |
+| `users`          | `username` unique                               | Profile uniqueness          |
+| `identities`     | `user_id`                                       | Find user's auth methods    |
+| `identities`     | `auth_method + auth_provider_id` partial unique | OAuth deduplication         |
+| `memberships`    | `user_id + organization_id` unique              | One membership per user-org |
+| `memberships`    | `organization_id`                               | List org members            |
+| `memberships`    | `user_id`                                       | List user's orgs            |
+| `memberships`    | `team_roles.team_id`                            | Find team members           |
+| `organizations`  | `slug` unique                                   | URL lookup                  |
+| `teams`          | `organization_id + slug` unique                 | Scoped lookup               |
+| `shared_secrets` | `organization_id + team_id`                     | List org/team secrets       |
+| `audit_events`   | `resource_id + timestamp` desc                  | Audit queries               |
+| `audit_events`   | `user_id + timestamp` desc                      | User history                |
+| `audit_events`   | `organization_id + timestamp` desc              | Org audit                   |
+| `audit_events`   | `timestamp` desc TTL 90d                        | Auto-expiration             |
 
 ---
 
 ## Open Questions / Future Work
 
-| Topic | Status |
-|-------|--------|
+| Topic                                             | Status                                          |
+| ------------------------------------------------- | ----------------------------------------------- |
 | KMS integration (AWS KMS, HashiCorp Vault, local) | TBD — interface defined, implementation pending |
-| Key rotation for org/team secrets | Schema supports `KeyVersion`, logic pending |
-| Client-side group encryption (advanced) | Schema designed for, not implemented |
-| Real-time audit streaming | Out of scope for MVP |
-| Secret versioning / history | Out of scope for MVP |
+| Key rotation for org/team secrets                 | Schema supports `KeyVersion`, logic pending     |
+| Client-side group encryption (advanced)           | Schema designed for, not implemented            |
+| Real-time audit streaming                         | Out of scope for MVP                            |
+| Secret versioning / history                       | Out of scope for MVP                            |
 
 ---
 

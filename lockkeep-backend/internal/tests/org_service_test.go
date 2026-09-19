@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/tests/mocks"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,7 @@ func newTestOrganizationService() (*services.OrganizationService, *mocks.MockOrg
 	return svc, orgRepo, membershipRepo
 }
 
-func TestOrganizationService_Create(t *testing.T) {
+func TestOrganizationService_CreateOrganization(t *testing.T) {
 
 	t.Run("successful creation", func(t *testing.T) {
 		svc, orgRepo, membershipRepo := newTestOrganizationService()
@@ -35,7 +36,7 @@ func TestOrganizationService_Create(t *testing.T) {
 		orgRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Organization")).Return(nil)
 		membershipRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Membership")).Return(nil)
 
-		org, err := svc.Create(context.Background(), userID, name, slug)
+		org, err := svc.CreateOrganization(context.Background(), userID, name, slug)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, org)
@@ -56,14 +57,14 @@ func TestOrganizationService_Create(t *testing.T) {
 
 		orgRepo.On("FindBySlug", mock.Anything, slug).Return(existing, nil)
 
-		_, err := svc.Create(context.Background(), userID, "Test", slug)
+		_, err := svc.CreateOrganization(context.Background(), userID, "Test", slug)
 
 		assert.ErrorIs(t, err, services.ErrOrgSlugTaken)
 		orgRepo.AssertExpectations(t)
 	})
 }
 
-func TestOrganizationService_GetBySlug(t *testing.T) {
+func TestOrganizationService_GetOrganizationBySlug(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		svc, orgRepo, _ := newTestOrganizationService()
@@ -73,7 +74,7 @@ func TestOrganizationService_GetBySlug(t *testing.T) {
 
 		orgRepo.On("FindBySlug", mock.Anything, slug).Return(org, nil)
 
-		result, err := svc.GetBySlug(context.Background(), slug)
+		result, err := svc.GetOrganizationBySlug(context.Background(), slug)
 
 		assert.NoError(t, err)
 		assert.Equal(t, org.ID, result.ID)
@@ -86,14 +87,14 @@ func TestOrganizationService_GetBySlug(t *testing.T) {
 		slug := "missing-org"
 		orgRepo.On("FindBySlug", mock.Anything, slug).Return(nil, nil)
 
-		_, err := svc.GetBySlug(context.Background(), slug)
+		_, err := svc.GetOrganizationBySlug(context.Background(), slug)
 
 		assert.ErrorIs(t, err, services.ErrOrganizationNotFound)
 		orgRepo.AssertExpectations(t)
 	})
 }
 
-func TestOrganizationService_ListForUser(t *testing.T) {
+func TestOrganizationService_ListOrganizationsByUser(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		svc, orgRepo, _ := newTestOrganizationService()
 
@@ -105,7 +106,7 @@ func TestOrganizationService_ListForUser(t *testing.T) {
 
 		orgRepo.On("FindByMember", mock.Anything, userID).Return(orgs, nil)
 
-		result, err := svc.ListForUser(context.Background(), userID)
+		result, err := svc.ListOrganizationsByUser(context.Background(), userID)
 
 		assert.NoError(t, err)
 		assert.Len(t, result, 2)
@@ -113,18 +114,16 @@ func TestOrganizationService_ListForUser(t *testing.T) {
 	})
 }
 
-func TestOrganizationService_Update(t *testing.T) {
-	t.Run("successful update by owner", func(t *testing.T) {
+func TestOrganizationService_UpdateOrganization(t *testing.T) {
+	t.Run("successful name update by owner", func(t *testing.T) {
 		svc, orgRepo, membershipRepo := newTestOrganizationService()
 
 		userID := bson.NewObjectID()
-		slug := "my-org"
-		newName := "Updated Org"
 		orgID := bson.NewObjectID()
 
 		org := &domain.Organization{
 			ID:      orgID,
-			Slug:    slug,
+			Slug:    "my-org",
 			Name:    "Old Name",
 			OwnerID: userID,
 		}
@@ -134,15 +133,78 @@ func TestOrganizationService_Update(t *testing.T) {
 			RoleID: domain.RoleOrgOwner,
 		}
 
-		orgRepo.On("FindBySlug", mock.Anything, slug).Return(org, nil)
+		orgRepo.On("FindByID", mock.Anything, orgID).Return(org, nil)
 		membershipRepo.On("FindByUserAndOrg", mock.Anything, userID, orgID).Return(membership, nil)
 		orgRepo.On("Update", mock.Anything, orgID, mock.AnythingOfType("domain.Organization")).Return(nil)
 
-		updated, err := svc.Update(context.Background(), userID, slug, newName)
+		updated, err := svc.UpdateOrganization(context.Background(), userID, orgID, dto.UpdateOrganizationDTO{
+			Name: "Updated Org",
+		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, newName, updated.Name)
+		assert.Equal(t, "Updated Org", updated.Name)
+		assert.Equal(t, "my-org", updated.Slug)
 
+		orgRepo.AssertExpectations(t)
+		membershipRepo.AssertExpectations(t)
+	})
+
+	t.Run("successful slug change (unique)", func(t *testing.T) {
+		svc, orgRepo, membershipRepo := newTestOrganizationService()
+
+		userID := bson.NewObjectID()
+		orgID := bson.NewObjectID()
+
+		org := &domain.Organization{
+			ID:      orgID,
+			Slug:    "old-slug",
+			Name:    "My Org",
+			OwnerID: userID,
+		}
+
+		membership := &domain.Membership{
+			UserID: userID,
+			RoleID: domain.RoleOrgAdmin,
+		}
+
+		orgRepo.On("FindByID", mock.Anything, orgID).Return(org, nil)
+		orgRepo.On("FindBySlug", mock.Anything, "new-slug").Return(nil, nil)
+		membershipRepo.On("FindByUserAndOrg", mock.Anything, userID, orgID).Return(membership, nil)
+		orgRepo.On("Update", mock.Anything, orgID, mock.AnythingOfType("domain.Organization")).Return(nil)
+
+		updated, err := svc.UpdateOrganization(context.Background(), userID, orgID, dto.UpdateOrganizationDTO{
+			Slug: "new-slug",
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "new-slug", updated.Slug)
+		orgRepo.AssertExpectations(t)
+		membershipRepo.AssertExpectations(t)
+	})
+
+	t.Run("slug already taken", func(t *testing.T) {
+		svc, orgRepo, membershipRepo := newTestOrganizationService()
+
+		userID := bson.NewObjectID()
+		orgID := bson.NewObjectID()
+
+		org := &domain.Organization{ID: orgID, Slug: "my-org", OwnerID: userID}
+		existing := &domain.Organization{ID: bson.NewObjectID(), Slug: "new-slug"}
+
+		membership := &domain.Membership{
+			UserID: userID,
+			RoleID: domain.RoleOrgOwner,
+		}
+
+		orgRepo.On("FindByID", mock.Anything, orgID).Return(org, nil)
+		orgRepo.On("FindBySlug", mock.Anything, "new-slug").Return(existing, nil)
+		membershipRepo.On("FindByUserAndOrg", mock.Anything, userID, orgID).Return(membership, nil)
+
+		_, err := svc.UpdateOrganization(context.Background(), userID, orgID, dto.UpdateOrganizationDTO{
+			Slug: "new-slug",
+		})
+
+		assert.ErrorIs(t, err, services.ErrOrgSlugTaken)
 		orgRepo.AssertExpectations(t)
 		membershipRepo.AssertExpectations(t)
 	})
@@ -151,46 +213,63 @@ func TestOrganizationService_Update(t *testing.T) {
 		svc, orgRepo, membershipRepo := newTestOrganizationService()
 
 		userID := bson.NewObjectID()
-		slug := "my-org"
 		orgID := bson.NewObjectID()
 
-		org := &domain.Organization{
-			ID:   orgID,
-			Slug: slug,
-		}
+		org := &domain.Organization{ID: orgID, Slug: "my-org"}
 
 		membership := &domain.Membership{
 			UserID: userID,
 			RoleID: domain.RoleTeamUser,
 		}
 
-		// Setup mocks with consistent IDs
-		orgRepo.On("FindBySlug", mock.Anything, slug).Return(org, nil)
+		orgRepo.On("FindByID", mock.Anything, orgID).Return(org, nil)
 		membershipRepo.On("FindByUserAndOrg", mock.Anything, userID, orgID).
 			Return(membership, nil)
 
-		_, err := svc.Update(context.Background(), userID, slug, "New Name")
+		_, err := svc.UpdateOrganization(context.Background(), userID, orgID, dto.UpdateOrganizationDTO{
+			Name: "New Name",
+		})
 
 		assert.ErrorIs(t, err, services.ErrEntityHasInvalidRoles)
 
 		orgRepo.AssertExpectations(t)
 		membershipRepo.AssertExpectations(t)
 	})
+
+	t.Run("empty update rejected", func(t *testing.T) {
+		svc, orgRepo, membershipRepo := newTestOrganizationService()
+
+		userID := bson.NewObjectID()
+		orgID := bson.NewObjectID()
+
+		org := &domain.Organization{ID: orgID, Slug: "my-org", OwnerID: userID}
+		membership := &domain.Membership{
+			UserID: userID,
+			RoleID: domain.RoleOrgOwner,
+		}
+
+		orgRepo.On("FindByID", mock.Anything, orgID).Return(org, nil)
+		membershipRepo.On("FindByUserAndOrg", mock.Anything, userID, orgID).Return(membership, nil)
+
+		_, err := svc.UpdateOrganization(context.Background(), userID, orgID, dto.UpdateOrganizationDTO{})
+
+		assert.ErrorIs(t, err, services.ErrInvalidOrganizationUpdate)
+		orgRepo.AssertExpectations(t)
+		membershipRepo.AssertExpectations(t)
+	})
 }
 
-func TestOrganizationService_Delete(t *testing.T) {
+func TestOrganizationService_DeleteOrganizations(t *testing.T) {
 	t.Run("successful delete by owner", func(t *testing.T) {
 		svc, orgRepo, _ := newTestOrganizationService()
 
 		userID := bson.NewObjectID()
-		slug := "my-org"
+		org := &domain.Organization{ID: bson.NewObjectID(), Slug: "my-org", OwnerID: userID}
 
-		org := &domain.Organization{ID: bson.NewObjectID(), Slug: slug, OwnerID: userID}
-
-		orgRepo.On("FindBySlug", mock.Anything, slug).Return(org, nil)
+		orgRepo.On("FindByID", mock.Anything, org.ID).Return(org, nil)
 		orgRepo.On("Delete", mock.Anything, org.ID).Return(nil)
 
-		err := svc.Delete(context.Background(), userID, slug)
+		err := svc.DeleteOrganizations(context.Background(), userID, []bson.ObjectID{org.ID})
 
 		assert.NoError(t, err)
 		orgRepo.AssertExpectations(t)
@@ -201,14 +280,24 @@ func TestOrganizationService_Delete(t *testing.T) {
 
 		userID := bson.NewObjectID()
 		ownerID := bson.NewObjectID()
-		slug := "my-org"
+		org := &domain.Organization{ID: bson.NewObjectID(), Slug: "my-org", OwnerID: ownerID}
 
-		org := &domain.Organization{ID: bson.NewObjectID(), Slug: slug, OwnerID: ownerID}
+		orgRepo.On("FindByID", mock.Anything, org.ID).Return(org, nil)
 
-		orgRepo.On("FindBySlug", mock.Anything, slug).Return(org, nil)
-
-		err := svc.Delete(context.Background(), userID, slug)
+		err := svc.DeleteOrganizations(context.Background(), userID, []bson.ObjectID{org.ID})
 
 		assert.ErrorIs(t, err, services.ErrNotOrgOwner)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		svc, orgRepo, _ := newTestOrganizationService()
+
+		orgID := bson.NewObjectID()
+		orgRepo.On("FindByID", mock.Anything, orgID).Return(nil, nil)
+
+		err := svc.DeleteOrganizations(context.Background(), bson.NewObjectID(), []bson.ObjectID{orgID})
+
+		assert.ErrorIs(t, err, services.ErrOrganizationNotFound)
+		orgRepo.AssertExpectations(t)
 	})
 }

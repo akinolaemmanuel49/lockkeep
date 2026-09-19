@@ -1,12 +1,16 @@
 package dto
 
-import "github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+import (
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
 
 type VaultItemUpdate struct {
-	ID     string        `json:"id" binding:"required"`
-	Type   VaultItemType `json:"type" binding:"required"`
-	Name   string        `json:"name" binding:"required"`
-	Secret SecretDTO     `json:"secret" binding:"required"`
+	ID       string         `json:"id" binding:"required"`
+	Type     *VaultItemType `json:"type" binding:"omitempty"`
+	Name     *string        `json:"name" binding:"omitempty"`
+	Secret   *SecretDTO     `json:"secret" binding:"omitempty"`
+	Metadata *bson.M        `json:"metadata,omitempty" binding:"omitempty"`
 }
 
 type MigrateVaultRequest struct {
@@ -28,6 +32,11 @@ type UpdateVaultItemRequest struct {
 	Name     string         `json:"name" binding:"required"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 	Secret   SecretDTO      `json:"secret" binding:"required"`
+}
+
+type UpdateOrganizationDTO struct {
+	Name string `json:"name,omitempty"`
+	Slug string `json:"slug,omitempty"`
 }
 
 type UpdateAccountPasswordRequest struct {
@@ -64,6 +73,11 @@ type OauthAuthorizeDTO struct {
 
 type UpdateUserProfileRequestDTO struct {
 	Username  *string `json:"username,omitempty"`
+	AvatarURL *string `json:"avatarUrl,omitempty"`
+}
+
+type UpdateVaultProfileRequestDTO struct {
+	Vaultname *string `json:"vaultname,omitempty"`
 	AvatarURL *string `json:"avatarUrl,omitempty"`
 }
 

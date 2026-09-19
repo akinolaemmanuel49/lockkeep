@@ -85,8 +85,17 @@ type VaultItemRepository interface {
 	Create(ctx context.Context, item *domain.VaultItem) error
 	FindByUser(ctx context.Context, userID bson.ObjectID) ([]domain.VaultItem, error)
 	FindByID(ctx context.Context, id bson.ObjectID) (*domain.VaultItem, error)
+	FindDuplicate(ctx context.Context, userID bson.ObjectID, name string, itemType domain.VaultItemType, excludeID *bson.ObjectID) (bool, error)
 	Update(ctx context.Context, id bson.ObjectID, item *domain.VaultItem) error
 	Delete(ctx context.Context, id bson.ObjectID) error
+}
+
+type VaultRepository interface {
+	IndexManager
+	Create(ctx context.Context, vault *domain.Vault) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.Vault, error)
+	FindByUser(ctx context.Context, userID bson.ObjectID) (*domain.Vault, error)
+	UpdateProfile(ctx context.Context, id bson.ObjectID, update domain.Vault) error
 }
 
 type CryptoPolicyRepository interface {

@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/tests/mocks"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +37,7 @@ func setupOrgRouter(mockSvc *mocks.MockOrganizationService) *gin.Engine {
 		org.Use(mocks.MockRequireOrgAccess())
 		{
 			org.GET("", h.Get)
+			org.PATCH("", h.Update)
 			org.DELETE("", h.Delete)
 		}
 	}
@@ -52,7 +56,7 @@ func TestOrganizationHandler_Create(t *testing.T) {
 	}
 
 	// Use mock.Anything for userID since it's generated in middleware
-	mockSvc.On("Create", mock.Anything, mock.AnythingOfType("bson.ObjectID"), "Test Org", "test-org").
+	mockSvc.On("CreateOrganization", mock.Anything, mock.AnythingOfType("bson.ObjectID"), "Test Org", "test-org").
 		Return(org, nil)
 
 	body := `{"name":"Test Org","slug":"test-org"}`
@@ -75,7 +79,7 @@ func TestOrganizationHandler_List(t *testing.T) {
 		{ID: bson.NewObjectID(), Name: "Org 1"},
 	}
 
-	mockSvc.On("ListForUser", mock.Anything, mock.AnythingOfType("bson.ObjectID")).Return(orgs, nil)
+	mockSvc.On("ListOrganizationsByUser", mock.Anything, mock.AnythingOfType("bson.ObjectID")).Return(orgs, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/organizations", nil)
 	w := httptest.NewRecorder()
@@ -93,7 +97,7 @@ func TestOrganizationHandler_Get(t *testing.T) {
 	slug := "my-org"
 	org := &domain.Organization{ID: bson.NewObjectID(), Slug: slug, Name: "My Org"}
 
-	mockSvc.On("GetBySlug", mock.Anything, slug).Return(org, nil)
+	mockSvc.On("GetOrganizationBySlug", mock.Anything, slug).Return(org, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/organizations/my-org", nil)
 	w := httptest.NewRecorder()
@@ -104,13 +108,40 @@ func TestOrganizationHandler_Get(t *testing.T) {
 	mockSvc.AssertExpectations(t)
 }
 
+func TestOrganizationHandler_Update(t *testing.T) {
+	mockSvc := new(mocks.MockOrganizationService)
+	router := setupOrgRouter(mockSvc)
+
+	slug := "my-org"
+	org := &domain.Organization{ID: bson.NewObjectID(), Slug: slug, Name: "My Org"}
+
+	mockSvc.On("GetOrganizationBySlug", mock.Anything, slug).Return(org, nil)
+	mockSvc.On("UpdateOrganization", mock.Anything, mock.AnythingOfType("bson.ObjectID"), org.ID,
+		mock.MatchedBy(func(d dto.UpdateOrganizationDTO) bool { return d.Name == "Renamed Org" })).
+		Return(&domain.Organization{ID: org.ID, Slug: slug, Name: "Renamed Org"}, nil)
+
+	body := `{"name":"Renamed Org"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/organizations/my-org", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "organization updated successfully")
+	assert.Contains(t, w.Body.String(), "Renamed Org")
+	mockSvc.AssertExpectations(t)
+}
+
 func TestOrganizationHandler_Delete(t *testing.T) {
 	mockSvc := new(mocks.MockOrganizationService)
 	router := setupOrgRouter(mockSvc)
 
 	slug := "my-org"
+	org := &domain.Organization{ID: bson.NewObjectID(), Slug: slug, Name: "My Org"}
 
-	mockSvc.On("Delete", mock.Anything, mock.AnythingOfType("bson.ObjectID"), slug).
+	mockSvc.On("GetOrganizationBySlug", mock.Anything, slug).Return(org, nil)
+	mockSvc.On("DeleteOrganizations", mock.Anything, mock.AnythingOfType("bson.ObjectID"), []bson.ObjectID{org.ID}).
 		Return(nil)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/organizations/my-org", nil)
@@ -119,5 +150,21 @@ func TestOrganizationHandler_Delete(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "organization deleted successfully")
+	mockSvc.AssertExpectations(t)
+}
+
+func TestOrganizationHandler_Delete_NotFound(t *testing.T) {
+	mockSvc := new(mocks.MockOrganizationService)
+	router := setupOrgRouter(mockSvc)
+
+	mockSvc.On("GetOrganizationBySlug", mock.Anything, "missing").
+		Return(nil, services.ErrOrganizationNotFound)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/organizations/missing", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.True(t, strings.Contains(w.Body.String(), "organization not found"))
 	mockSvc.AssertExpectations(t)
 }

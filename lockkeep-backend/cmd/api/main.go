@@ -41,7 +41,8 @@ func main() {
 	orgRepo := repositories.NewOrganizationRepository(rawDB)
 	membershipRepo := repositories.NewMembershipRepository(rawDB)
 	teamRepo := repositories.NewTeamRepository(rawDB)
-	// vaultItemRepo := repository.NewVaultItemRepository(rawDB)
+	vaultRepo := repositories.NewVaultRepository(rawDB)
+	vaultItemRepo := repositories.NewVaultItemRepository(rawDB)
 	// sharedSecretRepo := repository.NewSharedSecretRepository(rawDB)
 	// auditRepo := repository.NewAuditRepository(rawDB)
 	// cryptoPolicyRepo := repository.NewCryptoPolicyRepository(rawDB)
@@ -52,6 +53,8 @@ func main() {
 		identityRepo,
 		orgRepo,
 		membershipRepo,
+		vaultRepo,
+		vaultItemRepo,
 	}
 	for _, repo := range indexRepos {
 		if err := repo.EnsureIndexes(ctx); err != nil {
@@ -67,7 +70,8 @@ func main() {
 	userService := services.NewUserService(cfg, userRepo)
 	orgService := services.NewOrganizationService(orgRepo, membershipRepo)
 	teamService := services.NewTeamService(teamRepo, membershipRepo)
-	// vaultService := service.NewVaultService(vaultItemRepo)
+	vaultService := services.NewVaultService(cfg, vaultRepo, userRepo)
+	vaultItemService := services.NewVaultItemService(vaultItemRepo)
 	// sharedSecretService := service.NewSharedSecretService(sharedSecretRepo, auditRepo)
 	// auditService := service.NewAuditService(auditRepo)
 	// cryptoPolicyService := service.NewCryptoPolicyService(cryptoPolicyRepo)
@@ -77,6 +81,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService)
 	orgHandler := handlers.NewOrganizationHandler(orgService)
 	teamHandler := handlers.NewTeamHandler(teamService)
+	vaultHandler := handlers.NewVaultHandler(vaultService, vaultItemService)
 
 	// Middleware
 	authMiddleware := middleware.Auth(jwtManager)
@@ -101,15 +106,28 @@ func main() {
 	v2.POST("/auth/refresh", authHandler.Refresh)
 	v2.POST("/auth/oauth", authHandler.OAuth)
 
-	// User routes (profile, requires auth)
-	user := v2.Group("/user")
-	user.Use(authMiddleware)
+	// User routes (profile, requires auth). Personal vault lives under /me/vault.
+	me := v2.Group("/me")
+	me.Use(authMiddleware)
 	{
-		user.GET("/me", userHandler.GetMe)
-		user.PATCH("/me", userHandler.UpdateProfile)
-		// PATCH /me — update profile
-		// GET /me/vault — personal vault metadata
-		// etc.
+		me.GET("", userHandler.GetMe)
+		me.PATCH("", userHandler.UpdateProfile)
+
+		me.POST("/email", authHandler.UpdateEmail)
+		me.POST("/password", authHandler.UpdateAccountPassword)
+
+		me.GET("/vault", vaultHandler.GetVault)
+		me.PATCH("/vault", vaultHandler.UpdateVault)
+		me.POST("/vault/setup", authHandler.SetVerificationHash)
+		me.PUT("/vault/setup", authHandler.SetVerificationHash)
+		me.GET("/vault/kdfparams", authHandler.GetKDFParams)
+		me.POST("/vault/verify", vaultHandler.VerifyVaultPassword)
+
+		me.GET("/vault/items", vaultHandler.ListVaultItems)
+		me.POST("/vault/items", vaultHandler.CreateVaultItem)
+		me.GET("/vault/items/:itemID", vaultHandler.GetVaultItem)
+		me.PUT("/vault/items/:itemID", vaultHandler.UpdateVaultItem)
+		me.DELETE("/vault/items/:itemID", vaultHandler.DeleteVaultItem)
 	}
 
 	orgs := v2.Group("/organizations")
@@ -122,6 +140,8 @@ func main() {
 		org.Use(requireOrgAccess)
 		{
 			org.GET("", orgHandler.Get)
+			org.PATCH("", orgHandler.Update)
+			org.DELETE("", orgHandler.Delete)
 			org.GET("/teams", teamHandler.List)
 			org.POST("/teams", middleware.RequirePermission(domain.PermTeamManage), teamHandler.Create)
 

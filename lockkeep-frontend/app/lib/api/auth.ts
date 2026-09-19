@@ -65,7 +65,7 @@ export async function setVerificationHash(
     verificationHash: string,
     kdfParams: KDFParams,
 ): Promise<{ user: User }> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/auth/vault/create`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -83,7 +83,7 @@ export async function setVerificationHash(
 }
 
 export async function fetchKDFParams(): Promise<KDFParams> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/auth/vault/kdfparams`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/kdfparams`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
     });
@@ -99,7 +99,7 @@ export async function fetchKDFParams(): Promise<KDFParams> {
 export async function updateEmail(
     newEmail: string,
 ): Promise<{ access_token: string; refresh_token: string; user: User }> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/auth/update/email`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: newEmail }),
@@ -117,7 +117,7 @@ export async function updateAccountPassword(
     currentPassword: string,
     newPassword: string,
 ): Promise<void> {
-    const res = await authFetch(`${config.LOCKKEEP_API_URI}/auth/update/password`, {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword, newPassword }),

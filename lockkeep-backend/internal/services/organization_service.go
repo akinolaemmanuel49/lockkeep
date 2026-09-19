@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -21,7 +22,7 @@ func NewOrganizationService(orgRepo ports.OrganizationRepository, membershipRepo
 	}
 }
 
-func (s *OrganizationService) Create(ctx context.Context, userID bson.ObjectID, name, slug string) (*domain.Organization, error) {
+func (s *OrganizationService) CreateOrganization(ctx context.Context, userID bson.ObjectID, name, slug string) (*domain.Organization, error) {
 	// Check slug uniqueness
 	existing, err := s.orgRepo.FindBySlug(ctx, slug)
 	if err != nil {
@@ -65,7 +66,7 @@ func (s *OrganizationService) Create(ctx context.Context, userID bson.ObjectID, 
 	return org, nil
 }
 
-func (s *OrganizationService) GetBySlug(ctx context.Context, slug string) (*domain.Organization, error) {
+func (s *OrganizationService) GetOrganizationBySlug(ctx context.Context, slug string) (*domain.Organization, error) {
 	org, err := s.orgRepo.FindBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
@@ -76,12 +77,12 @@ func (s *OrganizationService) GetBySlug(ctx context.Context, slug string) (*doma
 	return org, nil
 }
 
-func (s *OrganizationService) ListForUser(ctx context.Context, userID bson.ObjectID) ([]domain.Organization, error) {
+func (s *OrganizationService) ListOrganizationsByUser(ctx context.Context, userID bson.ObjectID) ([]domain.Organization, error) {
 	return s.orgRepo.FindByMember(ctx, userID)
 }
 
-func (s *OrganizationService) Update(ctx context.Context, userID bson.ObjectID, slug string, name string) (*domain.Organization, error) {
-	org, err := s.orgRepo.FindBySlug(ctx, slug)
+func (s *OrganizationService) UpdateOrganization(ctx context.Context, userID bson.ObjectID, orgID bson.ObjectID, update dto.UpdateOrganizationDTO) (*domain.Organization, error) {
+	org, err := s.orgRepo.FindByID(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,26 @@ func (s *OrganizationService) Update(ctx context.Context, userID bson.ObjectID, 
 		return nil, ErrEntityHasInvalidRoles
 	}
 
-	org.Name = name
+	if update.Name == "" && update.Slug == "" {
+		return nil, ErrInvalidOrganizationUpdate
+	}
+
+	// Slug change must be globally unique
+	if update.Slug != "" && update.Slug != org.Slug {
+		existing, err := s.orgRepo.FindBySlug(ctx, update.Slug)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return nil, ErrOrgSlugTaken
+		}
+		org.Slug = update.Slug
+	}
+
+	if update.Name != "" {
+		org.Name = update.Name
+	}
+
 	org.UpdatedAt = time.Now()
 
 	if err := s.orgRepo.Update(ctx, org.ID, *org); err != nil {
@@ -111,21 +131,27 @@ func (s *OrganizationService) Update(ctx context.Context, userID bson.ObjectID, 
 	return org, nil
 }
 
-func (s *OrganizationService) Delete(ctx context.Context, userID bson.ObjectID, slug string) error {
-	org, err := s.orgRepo.FindBySlug(ctx, slug)
-	if err != nil {
-		return err
-	}
-	if org == nil {
-		return ErrOrganizationNotFound
+func (s *OrganizationService) DeleteOrganizations(ctx context.Context, userID bson.ObjectID, orgIDs []bson.ObjectID) error {
+	for _, orgID := range orgIDs {
+		org, err := s.orgRepo.FindByID(ctx, orgID)
+		if err != nil {
+			return err
+		}
+		if org == nil {
+			return ErrOrganizationNotFound
+		}
+
+		// Only owner can delete
+		if org.OwnerID != userID {
+			return ErrNotOrgOwner
+		}
+
+		// TODO: cascade delete memberships, teams, shared secrets
+
+		if err := s.orgRepo.Delete(ctx, org.ID); err != nil {
+			return err
+		}
 	}
 
-	// Only owner can delete
-	if org.OwnerID != userID {
-		return ErrNotOrgOwner
-	}
-
-	// TODO: cascade delete memberships, teams, shared secrets
-
-	return s.orgRepo.Delete(ctx, org.ID)
+	return nil
 }
