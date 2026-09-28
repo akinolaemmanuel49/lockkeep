@@ -2,12 +2,12 @@ import { useState } from "react";
 import { useVault } from "~/providers/vault";
 import { useToast } from "~/providers/toast";
 import VaultItemCard from "~/components/VaultItemCard";
-import PasswordItemModal from "~/components/PasswordItemModal";
+import ItemModal from "~/components/ItemModal";
 import ItemTypeSelector from "~/components/ItemTypeSelector";
 import UnlockModal from "~/components/UnlockModal";
 import VaultDial from "~/components/VaultDial";
 import Nameplate from "~/components/Nameplate";
-import type { VaultItem, VaultItemType } from "~/types/index";
+import type { VaultItem, VaultItemInput, VaultItemType } from "~/types/index";
 import { requireAuth, getCurrentUser } from "~/lib/auth-guard";
 import { redirect } from "react-router";
 import type { Route } from "./+types/dashboard";
@@ -49,9 +49,11 @@ export default function Dashboard() {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [pendingSave, setPendingSave] = useState<VaultItemInput | null>(null);
+  const [activeItemType, setActiveItemType] = useState<VaultItemType>("login");
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [editingSecret, setEditingSecret] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -78,11 +80,39 @@ export default function Dashboard() {
     setIsUnlockModalOpen(true);
   };
 
-  const handleUnlockSuccess = () => {
+  // Runs an unlock-gated action, transparently re-prompting for the master
+  // password if the vault token expired while the UI still reported unlocked.
+  const retryGuard = (action: () => Promise<void>) => async () => {
+    try {
+      await action();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed";
+      if (/locked|expired/i.test(message)) {
+        setPendingAction(() => retryGuard(action));
+        setIsUnlockModalOpen(true);
+        return;
+      }
+      addToast(message, "error");
+    }
+  };
+
+  const handleUnlockSuccess = async () => {
     setIsUnlockModalOpen(false);
     if (pendingAction) {
-      pendingAction();
+      const action = pendingAction;
       setPendingAction(null);
+      action();
+    }
+    if (pendingSave) {
+      const data = pendingSave;
+      setPendingSave(null);
+      try {
+        await persistItem(data);
+        addToast(editingItem ? "Record updated" : "Record saved", "success");
+        closeItemModal();
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : "Failed to save", "error");
+      }
     }
   };
 
@@ -93,57 +123,58 @@ export default function Dashboard() {
   };
 
   const handleTypeSelect = (type: VaultItemType) => {
+    setActiveItemType(type);
     setIsTypeSelectorOpen(false);
-    if (type === "login") {
-      setIsPasswordModalOpen(true);
-    }
+    setIsItemModalOpen(true);
   };
 
   const handleEdit = (item: VaultItem) => {
+    setActiveItemType(item.type);
     setEditingItem(item);
     setEditingSecret(null);
-    requestUnlock(async () => {
-      try {
+    requestUnlock(
+      retryGuard(async () => {
         const secret = await getSecret(item.id);
         setEditingSecret(secret);
-        setIsPasswordModalOpen(true);
-      } catch (err) {
-        addToast(
-          err instanceof Error ? err.message : "Failed to decrypt secret",
-          "error",
-        );
-      }
-    });
+        setIsItemModalOpen(true);
+      }),
+    );
   };
 
-  const handleSavePassword = async (data: {
-    name: string;
-    metadata: Record<string, unknown>;
-    secret: string;
-  }) => {
+  const closeItemModal = () => {
+    setIsItemModalOpen(false);
+    setEditingItem(null);
+    setEditingSecret(null);
+  };
+
+  const persistItem = async (data: VaultItemInput) => {
+    if (editingItem) {
+      await updateItem(editingItem.id, {
+        type: data.type,
+        name: data.name,
+        metadata: data.metadata,
+        secret: data.secret,
+      });
+    } else {
+      await addItem(data);
+    }
+  };
+
+  const handleSaveItem = async (data: VaultItemInput) => {
     try {
-      if (editingItem) {
-        await updateItem(editingItem.id, {
-          type: "login",
-          name: data.name,
-          metadata: data.metadata,
-          secret: data.secret,
-        });
-        addToast("Password updated", "success");
-      } else {
-        await addItem({
-          type: "login",
-          name: data.name,
-          metadata: data.metadata,
-          secret: data.secret,
-        });
-        addToast("Password saved", "success");
-      }
-      setIsPasswordModalOpen(false);
-      setEditingItem(null);
-      setEditingSecret(null);
+      await persistItem(data);
+      addToast(editingItem ? "Record updated" : "Record saved", "success");
+      closeItemModal();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : "Failed to save", "error");
+      const message = err instanceof Error ? err.message : "Failed to save";
+      if (/locked|expired/i.test(message)) {
+        // Vault (re-)locked while the form was open: keep the typed record and
+        // prompt for the master password, then complete the save automatically.
+        setPendingSave(data);
+        setIsUnlockModalOpen(true);
+        return;
+      }
+      addToast(message, "error");
     }
   };
 
@@ -167,26 +198,21 @@ export default function Dashboard() {
     itemId: string,
     onReveal: (secret: string) => void,
   ) => {
-    requestUnlock(async () => {
-      try {
-        const secret = await getSecret(itemId);
-        onReveal(secret);
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : "Failed to get secret", "error");
-      }
-    });
+    requestUnlock(
+      retryGuard(async () => {
+        onReveal(await getSecret(itemId));
+      }),
+    );
   };
 
   const handleCopySecret = (itemId: string) => {
-    requestUnlock(async () => {
-      try {
+    requestUnlock(
+      retryGuard(async () => {
         const secret = await getSecret(itemId);
         await navigator.clipboard.writeText(secret);
-        addToast("Password copied", "success");
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : "Failed to copy", "error");
-      }
-    });
+        addToast("Secret copied", "success");
+      }),
+    );
   };
 
   return (
@@ -331,13 +357,17 @@ export default function Dashboard() {
       )}
 
       {/* Modals */}
-      <UnlockModal
-        isOpen={isUnlockModalOpen}
-        onUnlock={handleUnlockSuccess}
-        onCancel={() => {
-          setIsUnlockModalOpen(false);
-          setPendingAction(null);
+      <ItemModal
+        isOpen={isItemModalOpen}
+        type={activeItemType}
+        item={editingItem}
+        decryptedSecret={editingSecret}
+        onClose={() => {
+          setIsItemModalOpen(false);
+          setEditingItem(null);
+          setEditingSecret(null);
         }}
+        onSave={handleSaveItem}
       />
 
       <ItemTypeSelector
@@ -346,16 +376,14 @@ export default function Dashboard() {
         onClose={() => setIsTypeSelectorOpen(false)}
       />
 
-      <PasswordItemModal
-        isOpen={isPasswordModalOpen}
-        item={editingItem}
-        decryptedSecret={editingSecret}
-        onClose={() => {
-          setIsPasswordModalOpen(false);
-          setEditingItem(null);
-          setEditingSecret(null);
+      <UnlockModal
+        isOpen={isUnlockModalOpen}
+        onUnlock={handleUnlockSuccess}
+        onCancel={() => {
+          setIsUnlockModalOpen(false);
+          setPendingAction(null);
+          setPendingSave(null);
         }}
-        onSave={handleSavePassword}
       />
     </div>
   );

@@ -7,7 +7,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { type VaultItem, type UpdateVaultItemRequest, type KDFParams, type CryptoPolicy } from "~/types/index";
+import { type VaultItem, type UpdateVaultItemRequest, type KDFParams, type CryptoPolicy, type VaultItemInput } from "~/types/index";
 import {
   deriveKeys,
   encryptSecret,
@@ -43,32 +43,14 @@ interface VaultContextValue {
   unlockVault: (password: string) => Promise<void>;
   lockVault: () => void;
   getSecret: (itemId: string) => Promise<string>;
-  addItem: (data: {
-    type: "login";
-    name: string;
-    metadata: {
-      siteUrl?: string;
-      identifier?: string;
-      notes?: string;
-    };
-    secret: string;
-  }) => Promise<void>;
+  addItem: (data: VaultItemInput) => Promise<void>;
   changeVaultPassword: (
     oldPassword: string,
     newPassword: string,
   ) => Promise<void>;
   updateItem: (
     id: string,
-    updates: Partial<{
-      type: "login";
-      name: string;
-      metadata: {
-        siteUrl?: string;
-        identifier?: string;
-        notes?: string;
-      };
-      secret: string;
-    }>,
+    updates: Partial<VaultItemInput>,
   ) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
 }
@@ -306,16 +288,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   const addItem = useCallback(
-    async (data: {
-      type: "login";
-      name: string;
-      metadata: {
-        siteUrl?: string;
-        identifier?: string;
-        notes?: string;
-      };
-      secret: string;
-    }) => {
+    async (data: VaultItemInput) => {
       getAccessTokenOrThrow();
       if (checkLocked()) throw new Error("Vault locked");
 
@@ -375,16 +348,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const updateItem = useCallback(
     async (
       id: string,
-      updates: Partial<{
-        type: "login";
-        name: string;
-        metadata: {
-          siteUrl?: string;
-          identifier?: string;
-          notes?: string;
-        };
-        secret: string;
-      }>,
+      updates: Partial<VaultItemInput>,
     ) => {
       getAccessTokenOrThrow();
       if (checkLocked()) throw new Error("Vault locked");

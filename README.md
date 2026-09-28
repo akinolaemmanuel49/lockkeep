@@ -344,6 +344,34 @@ Supported KDFs:
 
 ---
 
+## Record Types
+
+The vault supports six encrypt-at-rest record types. Every type stores a single,
+client-side-encrypted secret plus an optional plaintext `metadata` map
+(non-sensitive details such as identifiers, usernames, expiry dates, or scopes):
+
+| Type | API value | Secret (encrypted) | Sample metadata |
+|------|-----------|--------------------|-----------------|
+| Password / Login | `login` | password | `siteUrl`, `identifier`, `notes` |
+| Environment Variable | `environment` | variable value | `notes` |
+| SSH Key | `ssh_key` | private key body | `username`, `notes` |
+| Secure Note | `secure_note` | note content | `notes` |
+| Payment Card | `payment_card` | PAN (card number) | `cardHolder`, `expiresAt`, `notes` |
+| API Key | `api_key` | key value | `issuer`, `scopes`, `notes` |
+
+> **Security note:** `metadata` is stored as plaintext on the server alongside the
+> AES-GCM-encrypted secret. Never place sensitive material (passwords, keys, PANs,
+> CVVs) in metadata — only in the encrypted `secret` field. Because each record has
+> a single encrypted field, sensitive secondary values (e.g. card CVV or an SSH key
+> passphrase) are intentionally not supported.
+
+> **Unlock-on-save:** If the vault locks — or its short-lived unlock token expires —
+> while you're composing a record, saving prompts for the master password and then
+> completes the save automatically. Nothing typed is lost; the same applies when
+> revealing, copying, or decrypting a secret mid-session.
+
+---
+
 ## Development
 
 ### Backend

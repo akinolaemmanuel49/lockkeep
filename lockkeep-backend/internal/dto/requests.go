@@ -6,8 +6,7 @@ import (
 )
 
 type VaultItemUpdate struct {
-	ID       string         `json:"id" binding:"required"`
-	Type     *VaultItemType `json:"type" binding:"omitempty"`
+	Type     *VaultItemType `json:"type" binding:"omitempty,oneof=login environment ssh_key secure_note payment_card api_key"`
 	Name     *string        `json:"name" binding:"omitempty"`
 	Secret   *SecretDTO     `json:"secret" binding:"omitempty"`
 	Metadata *bson.M        `json:"metadata,omitempty" binding:"omitempty"`
@@ -21,14 +20,14 @@ type MigrateVaultRequest struct {
 }
 
 type CreateVaultItemRequest struct {
-	Type     VaultItemType  `json:"type" binding:"required"`
+	Type     VaultItemType  `json:"type" binding:"required,oneof=login environment ssh_key secure_note payment_card api_key"`
 	Name     string         `json:"name" binding:"required"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 	Secret   SecretDTO      `json:"secret" binding:"required"`
 }
 
 type UpdateVaultItemRequest struct {
-	Type     VaultItemType  `json:"type" binding:"required"`
+	Type     VaultItemType  `json:"type" binding:"required,oneof=login environment ssh_key secure_note payment_card api_key"`
 	Name     string         `json:"name" binding:"required"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 	Secret   SecretDTO      `json:"secret" binding:"required"`

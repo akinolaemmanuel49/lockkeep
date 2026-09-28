@@ -62,6 +62,23 @@ docker build -t lockkeep-ui .
 
 The frontend serves on port `3000` and expects the backend at `VITE_LOCKKEEP_API_URI`.
 
+## Record Types
+
+The vault accepts six record types, each rendered with a type-specific form and
+card layout via `app/lib/recordTypes.tsx`:
+
+| Type | Form fields (metadata) | Secret field |
+|------|------------------------|--------------|
+| `login` | site URL, identifier | password (with generator) |
+| `environment` | — | value |
+| `ssh_key` | username | private key (multiline) |
+| `secure_note` | — | note (multiline) |
+| `payment_card` | card holder, expiration | card number (masked as `•••• •••• •••• ••••`, formatted on reveal) |
+| `api_key` | issuer, scopes | key value |
+
+Only the encrypted `secret` field should hold sensitive data — `metadata` is
+stored in plaintext by design.
+
 ## Vault Architecture
 (scrypt/Argon2id)
 ```
@@ -81,3 +98,6 @@ The frontend serves on port `3000` and expects the backend at `VITE_LOCKKEEP_API
 - **Vault unlock**: Derives key from password + stored KDF params, verifies hash, decrypts all secrets into memory cache
 - **KDF migration**: On unlock or password change, detects policy drift, re-derives key with new params, re-encrypts everything server-side
 - **Vault lock**: Wipes key and cache from memory
+- **Seamless unlock**: If the token expires (or the vault locks) while a record form is
+  open, saving re-prompts for the master password and completes automatically —
+  typed input is preserved. Expired decrypt/reveal/copy actions retry after unlocking.

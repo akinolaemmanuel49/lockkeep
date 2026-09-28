@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { VaultItem } from "~/types/index";
+import { getRecordType } from "~/lib/recordTypes";
 
 interface VaultItemCardProps {
   item: VaultItem;
@@ -7,6 +8,14 @@ interface VaultItemCardProps {
   onCopySecret: () => void;
   onEdit: (item: VaultItem) => void;
   onDelete: (id: string) => void;
+}
+
+const CARD_MASK = "••••••••••";
+const PAN_MASK = "•••• •••• •••• ••••";
+
+function formatPan(pan: string): string {
+  const digits = pan.replace(/\D/g, "");
+  return digits ? digits.match(/.{1,4}/g)?.join(" ") ?? pan : pan;
 }
 
 export default function VaultItemCard({
@@ -20,10 +29,22 @@ export default function VaultItemCard({
   const [showSecret, setShowSecret] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const def = getRecordType(item.type);
   const metadata = item.metadata || {};
-  const siteUrl = (metadata.siteUrl as string) || "";
-  const identifier = (metadata.identifier as string) || "";
   const notes = (metadata.notes as string) || "";
+  const siteUrl = (metadata.siteUrl as string) || "";
+  const isMultiline = def.secret.multiline === true;
+  const isPayment = item.type === "payment_card";
+  const displayedSecret = showSecret && secret ? secret : "";
+
+  const metadataRows = def.metadataFields
+    .filter((f) => f.key !== "siteUrl")
+    .map((f) => ({
+      key: f.key,
+      label: f.label,
+      value: (metadata[f.key] as string) || "",
+    }))
+    .filter((r) => r.value);
 
   const handleToggleSecret = () => {
     if (showSecret) {
@@ -42,13 +63,9 @@ export default function VaultItemCard({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const copyIdentifier = async () => {
-    if (identifier) {
-      await navigator.clipboard.writeText(identifier);
-    }
+  const copyRow = async (value: string) => {
+    await navigator.clipboard.writeText(value);
   };
-
-  const maskSecret = () => "••••••••••";
 
   const iconButton =
     "shrink-0 rounded p-1.5 text-sand-600 transition-colors hover:text-brass-300 hover:bg-brass-500/10";
@@ -60,7 +77,7 @@ export default function VaultItemCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center rounded border border-brass-500/30 bg-brass-500/10 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-brass-300">
-              {item.type.replace("_", " ")}
+              {def.label}
             </span>
           </div>
           <h3 className="mt-2 truncate font-display text-lg font-medium text-ivory">
@@ -107,19 +124,19 @@ export default function VaultItemCard({
 
       {/* Record body */}
       <div className="flex flex-col gap-4">
-        {identifier && (
-          <div>
+        {metadataRows.map((row) => (
+          <div key={row.key}>
             <span className="text-[0.625rem] font-semibold uppercase tracking-[0.22em] text-sand-600">
-              Identifier
+              {row.label}
             </span>
             <div className="mt-1 flex items-center gap-2">
               <span className="flex-1 truncate font-mono text-sm text-sand-300">
-                {identifier}
+                {row.value}
               </span>
               <button
-                onClick={copyIdentifier}
+                onClick={() => copyRow(row.value)}
                 className={`${iconButton} scale-90`}
-                title="Copy identifier"
+                title={`Copy ${row.label}`}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -128,17 +145,31 @@ export default function VaultItemCard({
               </button>
             </div>
           </div>
-        )}
+        ))}
 
         <div>
           <span className="text-[0.625rem] font-semibold uppercase tracking-[0.22em] text-sand-600">
-            Password
+            {def.secret.label}
           </span>
-          <div className="mt-1 flex items-center gap-2">
-            <code className="flex-1 truncate font-mono text-sm tracking-[0.14em] text-ivory">
-              {showSecret && secret ? secret : maskSecret()}
-            </code>
-            <div className="flex gap-0.5">
+          <div className="mt-1 flex items-start gap-2">
+            {isMultiline ? (
+              <pre className="flex-1 whitespace-pre-wrap break-words font-mono text-sm text-ivory">
+                {showSecret && secret
+                  ? secret
+                  : `${CARD_MASK}${CARD_MASK}`}
+              </pre>
+            ) : (
+              <code className="flex-1 truncate font-mono text-sm tracking-[0.14em] text-ivory">
+                {showSecret && secret
+                  ? isPayment
+                    ? formatPan(secret)
+                    : secret
+                  : isPayment
+                    ? PAN_MASK
+                    : CARD_MASK}
+              </code>
+            )}
+            <div className="flex shrink-0 gap-0.5">
               <button
                 onClick={handleToggleSecret}
                 className={`${iconButton} scale-90`}
@@ -159,7 +190,7 @@ export default function VaultItemCard({
               <button
                 onClick={handleCopySecret}
                 className={`${iconButton} scale-90`}
-                title="Copy password"
+                title={`Copy ${def.secret.label}`}
               >
                 {copied ? (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#63ae85" strokeWidth="2">

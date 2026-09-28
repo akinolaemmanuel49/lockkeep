@@ -92,6 +92,14 @@ export interface UpdateVaultItemRequest {
     secret: Secret;
 }
 
+/** User-supplied payload for creating or updating a vault item (secret in plaintext). */
+export interface VaultItemInput {
+    type: VaultItemType;
+    name: string;
+    metadata: Record<string, unknown>;
+    secret: string;
+}
+
 export interface MigrateVaultRequest {
     expected_version: number;
     verification_hash: string;
