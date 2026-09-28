@@ -9,13 +9,13 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, input dto.RegisterRequestDTO) (*domain.User, error)
-	Login(ctx context.Context, input dto.LoginRequestDTO) (*domain.User, *dto.TokenPair, error)
-	OAuth(ctx context.Context, accessToken string) (*domain.User, *dto.TokenPair, bool, error)
+	Register(ctx context.Context, input dto.RegisterRequestDTO) (*dto.UserResponse, *dto.TokenPair, error)
+	Login(ctx context.Context, input dto.LoginRequestDTO) (*dto.UserResponse, *dto.TokenPair, error)
+	OAuth(ctx context.Context, accessToken string) (*dto.UserResponse, *dto.TokenPair, bool, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.TokenPair, error)
 	SetVerificationHash(ctx context.Context, userID bson.ObjectID, req dto.SetVerificationHashRequest) (*domain.User, error)
 	GetKDFParams(ctx context.Context, userID bson.ObjectID) (*domain.KDFParams, error)
-	UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*domain.User, *dto.TokenPair, error)
+	UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*dto.UserResponse, *dto.TokenPair, error)
 	UpdateAccountPassword(ctx context.Context, userID bson.ObjectID, req dto.UpdateAccountPasswordRequest) error
 }
 
@@ -53,4 +53,9 @@ type VaultItemService interface {
 	GetVaultItemByID(ctx context.Context, userID bson.ObjectID, vaultItemID bson.ObjectID) (*domain.VaultItem, error)
 	UpdateVaultItem(ctx context.Context, userID bson.ObjectID, vaultItemID bson.ObjectID, update dto.VaultItemUpdate) (*domain.VaultItem, error)
 	DeleteVaultItems(ctx context.Context, userID bson.ObjectID, vaultItemIDs []bson.ObjectID) error
+}
+
+type CryptoPolicyService interface {
+	GetCurrentPolicy(ctx context.Context) (*domain.CryptoPolicy, error)
+	SetCurrentPolicy(ctx context.Context, policy *dto.SetCurrentPolicy) error
 }

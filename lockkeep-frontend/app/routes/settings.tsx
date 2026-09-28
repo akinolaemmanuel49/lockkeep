@@ -3,12 +3,10 @@ import { useAuth } from "~/providers/auth";
 import { useVault } from "~/providers/vault";
 import { useToast } from "~/providers/toast";
 
-import {
-  calculatePasswordStrength,
-  strengthColors,
-  strengthLabels,
-} from "~/utils/calculatePasswordStrength";
+import { calculatePasswordStrength } from "~/utils/calculatePasswordStrength";
 import AccordionSection from "~/components/Accordion";
+import Nameplate from "~/components/Nameplate";
+import PasswordStrength from "~/components/PasswordStrength";
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/settings";
 import { updateAccountPassword, updateEmail } from "~/lib/api/auth";
@@ -19,7 +17,7 @@ export const clientLoader = () => {
   return null;
 };
 
-export function meta({ }: Route.MetaArgs) {
+export function meta({}: Route.MetaArgs) {
   return [
     { title: "Settings - LockKeep" },
     {
@@ -33,7 +31,7 @@ export function meta({ }: Route.MetaArgs) {
 
 export default function Settings() {
   const { user, getAccessToken, logout } = useAuth();
-  const { isLocked, changeVaultPassword } = useVault();
+  const { changeVaultPassword } = useVault();
   const { addToast } = useToast();
 
   const [openSection, setOpenSection] = useState<string | null>("account");
@@ -63,14 +61,14 @@ export default function Settings() {
   const handleEmailUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!accessToken) {
-      throw new Error("Not authenticated")
-    };
+      throw new Error("Not authenticated");
+    }
     if (!user || isOAuth) return;
 
     setIsUpdatingEmail(true);
     try {
       await updateEmail(email);
-      logout()
+      logout();
       navigate("/login");
       addToast("Email updated successfully", "success");
     } catch (err) {
@@ -98,10 +96,7 @@ export default function Settings() {
 
     setIsChangingAccountPassword(true);
     try {
-      await updateAccountPassword(
-        currentAccountPassword,
-        newAccountPassword,
-      );
+      await updateAccountPassword(currentAccountPassword, newAccountPassword);
       addToast("Account password changed successfully", "success");
       setCurrentAccountPassword("");
       setNewAccountPassword("");
@@ -136,11 +131,6 @@ export default function Settings() {
       return;
     }
 
-    // if (isLocked) {
-    //   addToast("Vault must be unlocked to change vault password", "error");
-    //   return;
-    // }
-
     setIsChangingVaultPassword(true);
     try {
       await changeVaultPassword(currentVaultPassword, newVaultPassword);
@@ -168,7 +158,12 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-8 text-3xl font-bold text-slate-100">Settings</h1>
+      <div className="mb-8">
+        <Nameplate>Operations</Nameplate>
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-ivory">
+          Settings
+        </h1>
+      </div>
 
       {/* Account Accordion */}
       <AccordionSection
@@ -178,8 +173,8 @@ export default function Settings() {
         onToggle={() => toggleSection("account")}
       >
         {isOAuth ? (
-          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-4">
-            <p className="text-sm text-sky-300">
+          <div className="rounded-lg border border-brass-500/20 bg-brass-500/5 p-4">
+            <p className="text-sm text-brass-300">
               Your account is managed by{" "}
               {user?.authMethod === "oauth_google" ? "Google" : "GitHub"} OAuth.
               Email and account password cannot be changed here.
@@ -189,7 +184,7 @@ export default function Settings() {
           <div className="flex flex-col gap-6">
             <form onSubmit={handleEmailUpdate} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-slate-400">
+                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
                   Email Address
                 </label>
                 <input
@@ -197,54 +192,52 @@ export default function Settings() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
+                  className="lk-input"
                 />
               </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={isUpdatingEmail || email === user?.email}
-                  className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300 disabled:opacity-50"
+                  className="lk-btn lk-btn--primary"
                 >
                   {isUpdatingEmail ? "Updating..." : "Update Email"}
                 </button>
               </div>
             </form>
 
-            <div className="h-px bg-slate-800" />
+            <div className="h-px bg-brass-500/10" />
 
             <form
               onSubmit={handleAccountPasswordChange}
               className="flex flex-col gap-4"
             >
-              <h3 className="text-sm font-medium text-slate-400">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-sand-400">
                 Change Account Password
               </h3>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-500">
-                  Current Password
-                </label>
+                <label className="text-xs text-sand-600">Current Password</label>
                 <input
                   type="password"
                   value={currentAccountPassword}
                   onChange={(e) => setCurrentAccountPassword(e.target.value)}
                   required
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
+                  className="lk-input"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-500">New Password</label>
+                <label className="text-xs text-sand-600">New Password</label>
                 <input
                   type="password"
                   value={newAccountPassword}
                   onChange={(e) => setNewAccountPassword(e.target.value)}
                   required
                   placeholder="At least 8 characters"
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
+                  className="lk-input"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-500">
+                <label className="text-xs text-sand-600">
                   Confirm New Password
                 </label>
                 <input
@@ -252,14 +245,14 @@ export default function Settings() {
                   value={confirmAccountPassword}
                   onChange={(e) => setConfirmAccountPassword(e.target.value)}
                   required
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
+                  className="lk-input"
                 />
               </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={isChangingAccountPassword}
-                  className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300 disabled:opacity-50"
+                  className="lk-btn lk-btn--primary"
                 >
                   {isChangingAccountPassword
                     ? "Updating..."
@@ -283,7 +276,7 @@ export default function Settings() {
           className="flex flex-col gap-4"
         >
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
               Current Vault Password
             </label>
             <input
@@ -291,12 +284,12 @@ export default function Settings() {
               value={currentVaultPassword}
               onChange={(e) => setCurrentVaultPassword(e.target.value)}
               required
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
+              className="lk-input"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
               New Vault Password
             </label>
             <input
@@ -310,25 +303,16 @@ export default function Settings() {
               }}
               required
               placeholder="Minimum 12 characters"
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
+              className="lk-input"
             />
-            {newVaultPassword && (
-              <div className="flex items-center gap-3">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${strengthColors[masterPasswordStrength]}`}
-                    style={{ width: `${(masterPasswordStrength / 5) * 100}%` }}
-                  />
-                </div>
-                <span className="text-xs font-medium text-slate-400">
-                  {strengthLabels[masterPasswordStrength]}
-                </span>
-              </div>
-            )}
+            <PasswordStrength
+              password={newVaultPassword}
+              score={masterPasswordStrength}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
               Confirm New Vault Password
             </label>
             <input
@@ -336,11 +320,11 @@ export default function Settings() {
               value={confirmVaultPassword}
               onChange={(e) => setConfirmVaultPassword(e.target.value)}
               required
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 focus:border-sky-400 focus:outline-none"
+              className="lk-input"
             />
           </div>
 
-          <div className="flex gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-300">
+          <div className="flex gap-3 rounded-lg border border-vermillion-500/25 bg-vermillion-500/5 p-4 text-sm text-vermillion-300">
             <svg
               width="16"
               height="16"
@@ -357,8 +341,8 @@ export default function Settings() {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
             <span>
-              Changing your vault password will re-encrypt vault content with
-              a new key. This operation may take a moment depending on how many
+              Changing your vault password will re-encrypt vault content with a
+              new key. This operation may take a moment depending on how many
               items you have.
             </span>
           </div>
@@ -367,10 +351,10 @@ export default function Settings() {
             <button
               type="submit"
               disabled={isChangingVaultPassword}
-              className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300 disabled:opacity-50"
+              className="lk-btn lk-btn--primary"
             >
               {isChangingVaultPassword
-                ? "Updating..."
+                ? "Re-encrypting..."
                 : "Change Vault Password"}
             </button>
           </div>

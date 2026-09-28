@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/not-found";
+import VaultDial from "~/components/VaultDial";
+import Nameplate from "~/components/Nameplate";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -14,37 +16,22 @@ export function meta({}: Route.MetaArgs) {
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center px-4 text-center">
-      <div className="mb-6 text-slate-600">
-        <svg
-          width="64"
-          height="64"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-      </div>
+    <div className="flex min-h-[calc(100vh-9rem)] flex-col items-center justify-center px-4 text-center">
+      <VaultDial size={160} pointer="?" className="text-brass-600" />
 
-      <h1 className="mb-4 text-4xl font-bold tracking-tight text-slate-100">
-        404
+      <Nameplate className="mt-8 justify-center" tone="muted">
+        Error 404
+      </Nameplate>
+      <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight text-ivory">
+        Off the record.
       </h1>
-
-      <p className="mb-10 max-w-lg text-lg text-slate-400">
-        The page you are looking for does not exist.
+      <p className="mt-3 mb-8 max-w-md text-sand-400">
+        This case may not be part of the vault's index. The combination you
+        dialed doesn't correspond to anything on file.
       </p>
 
-      <Link
-        to="/"
-        className="rounded-xl bg-sky-400 px-8 py-3.5 text-base font-semibold text-slate-950 hover:bg-sky-300"
-      >
-        Return Home
+      <Link to="/" className="lk-btn lk-btn--primary">
+        Return to the Vault
       </Link>
     </div>
   );

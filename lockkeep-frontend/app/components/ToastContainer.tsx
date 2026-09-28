@@ -56,21 +56,21 @@ function ToastItem({
   toast: { id: string; message: string; type: "error" | "success" | "info" };
   onDismiss: () => void;
 }) {
-  const colors = {
+  const styles = {
     error: {
-      wrapper:
-        "border-red-400/30 bg-red-500 text-red-50 shadow-lg shadow-red-500/20",
-      icon: "text-red-100",
+      lamp: "bg-vermillion-400",
+      accent: "border-vermillion-500/40 text-vermillion-300",
+      icon: "text-vermillion-300",
     },
     success: {
-      wrapper:
-        "border-green-400/30 bg-green-500 text-green-50 shadow-lg shadow-green-500/20",
-      icon: "text-green-100",
+      lamp: "bg-patina-400",
+      accent: "border-patina-500/40 text-patina-300",
+      icon: "text-patina-300",
     },
     info: {
-      wrapper:
-        "border-sky-400/30 bg-sky-500 text-sky-50 shadow-lg shadow-sky-500/20",
-      icon: "text-sky-100",
+      lamp: "bg-brass-400",
+      accent: "border-brass-500/40 text-brass-300",
+      icon: "text-brass-300",
     },
   };
 
@@ -123,18 +123,20 @@ function ToastItem({
     ),
   };
 
-  const color = colors[toast.type];
+  const style = styles[toast.type];
 
   return (
     <div
-      className={`flex max-w-sm items-start gap-3 rounded-lg border px-4 py-3 shadow-lg ${color.wrapper} animate-in slide-in-from-right fade-in duration-300`}
+      className={`flex max-w-sm items-start gap-3 rounded-lg border bg-coal-900 px-4 py-3 shadow-lg shadow-black/40 ${style.accent}`}
       role="alert"
     >
-      <div className={`mt-0.5 shrink-0 ${color.icon}`}>{icons[toast.type]}</div>
+      <span
+        className={`mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${style.lamp}`}
+      />
       <p className="flex-1 text-sm leading-relaxed">{toast.message}</p>
       <button
         onClick={onDismiss}
-        className="shrink-0 text-current opacity-60 hover:opacity-100 cursor-pointer"
+        className={`shrink-0 ${style.icon} cursor-pointer opacity-60 transition-opacity hover:opacity-100`}
         aria-label="Dismiss"
       >
         <svg

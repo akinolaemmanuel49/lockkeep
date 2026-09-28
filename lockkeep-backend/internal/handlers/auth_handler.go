@@ -44,21 +44,20 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 		return
 	}
 
-	if isNewUser {
-		c.JSON(http.StatusCreated, gin.H{
-			"user":    user,
-			"message": "user created successfully",
-		})
-		return
-	}
-
 	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
 
-	c.JSON(http.StatusOK, gin.H{
+	status := http.StatusOK
+	message := "user logged in successfully"
+	if isNewUser {
+		status = http.StatusCreated
+		message = "user created successfully"
+	}
+
+	c.JSON(status, gin.H{
 		"access_token":  tokens.AccessToken,
 		"refresh_token": tokens.RefreshToken,
 		"user":          user,
-		"message":       "user logged in successfully",
+		"message":       message,
 	})
 }
 
@@ -69,7 +68,7 @@ func (h *AuthHandler) Register(ctx *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Register(ctx.Request.Context(), req)
+	user, tokens, err := h.authService.Register(ctx.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, services.ErrEmailTaken) {
 			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -79,9 +78,13 @@ func (h *AuthHandler) Register(ctx *gin.Context) {
 		return
 	}
 
+	ctx.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+
 	ctx.JSON(http.StatusCreated, gin.H{
-		"user":    user,
-		"message": "user created successfully",
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+		"user":          user,
+		"message":       "user created successfully",
 	})
 }
 

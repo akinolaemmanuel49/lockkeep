@@ -5,17 +5,17 @@ import Field from "~/components/Field";
 import OAuthButton from "~/components/OAuthButton";
 import { useOAuthLogin } from "~/hooks/useOAuthLogin";
 import { AuthButton } from "~/components/AuthButton";
+import AuthPlate from "~/components/AuthPlate";
 import { useToast } from "~/providers/toast";
 import { requireGuest } from "~/lib/auth-guard";
 import type { Route } from "./+types/login";
 import { localLogin } from "~/lib/api/auth";
 
-
 export const clientLoader = () => {
   return requireGuest();
 };
 
-export function meta({ }: Route.MetaArgs) {
+export function meta({}: Route.MetaArgs) {
   return [
     { title: "Sign In - LockKeep" },
     {
@@ -35,10 +35,7 @@ export default function Login() {
   const { addToast } = useToast();
   const navigate = useNavigate();
 
-  const {
-    handleOAuth,
-    isLoading: isOAuthLoading,
-  } = useOAuthLogin();
+  const { handleOAuth, isLoading: isOAuthLoading } = useOAuthLogin();
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,15 +56,12 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-slate-100">Sign In</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Welcome back to your vault
-          </p>
-        </div>
-
+    <div className="flex min-h-[calc(100vh-9rem)] items-center justify-center px-4">
+      <AuthPlate
+        title="Sign In"
+        eyebrow="Authorized Personnel"
+        description="Welcome back to the vault."
+      >
         <div className="mb-6 flex flex-col gap-3">
           <OAuthButton
             provider="google"
@@ -83,10 +77,10 @@ export default function Login() {
 
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-800" />
+            <div className="w-full border-t border-brass-500/15" />
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="bg-slate-900 px-3 text-slate-600">or</span>
+            <span className="bg-coal-900 px-3 text-sand-500">or</span>
           </div>
         </div>
 
@@ -109,16 +103,16 @@ export default function Login() {
           <AuthButton ctx="signin" isLoading={isLoading} />
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-500">
+        <p className="mt-6 text-center text-sm text-sand-500">
           Don't have an account?{" "}
           <Link
             to="/signup"
-            className="font-medium text-sky-400 hover:text-sky-300"
+            className="font-medium text-brass-400 hover:text-brass-300"
           >
-            Sign up
+            Request access
           </Link>
         </p>
-      </div>
+      </AuthPlate>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export function clientLoader({ request }: Route.ClientLoaderArgs) {
     }
 
     const user = JSON.parse(userStr);
-    if (user.userType !== "admin") {
+    if (user.systemRole !== "system:admin") {
         throw redirect("/unauthorized");
     }
 

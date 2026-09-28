@@ -90,7 +90,7 @@ func TestAuthHandler_UpdateEmail(t *testing.T) {
 	mockSvc := new(mocks.MockAuthService)
 	router := setupAuthRouter(mockSvc)
 
-	user := &domain.User{ID: mocks.MustObjectID(mocks.SampleObjectIDHex), Email: "new@example.com"}
+	user := &dto.UserResponse{ID: mocks.MustObjectID(mocks.SampleObjectIDHex).Hex(), Email: "new@example.com"}
 	tokens := &dto.TokenPair{AccessToken: "access.token", RefreshToken: "refresh.token"}
 
 	mockSvc.On("UpdateEmail", mock.Anything, mocks.MustObjectID(mocks.SampleObjectIDHex),
@@ -151,14 +151,16 @@ func TestAuthHandler_Register(t *testing.T) {
 	mockSvc := new(mocks.MockAuthService)
 	router := setupAuthRouter(mockSvc)
 
-	user := &domain.User{
-		ID:       bson.NewObjectID(),
-		Username: "testuser",
-		Email:    "test@example.com",
+	user := &dto.UserResponse{
+		ID:                bson.NewObjectID().Hex(),
+		Email:             "test@example.com",
+		AuthMethod:        "local",
+		HasMasterPassword: false,
 	}
+	tokens := &dto.TokenPair{AccessToken: "access.token", RefreshToken: "refresh.token"}
 
 	mockSvc.On("Register", mock.Anything, mock.AnythingOfType("dto.RegisterRequestDTO")).
-		Return(user, nil)
+		Return(user, tokens, nil)
 
 	body := `{"username":"testuser","email":"test@example.com","password":"supersecret123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/register", bytes.NewBufferString(body))
@@ -169,6 +171,7 @@ func TestAuthHandler_Register(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 	assert.Contains(t, w.Body.String(), "user created successfully")
+	assert.Contains(t, w.Body.String(), "access_token")
 	mockSvc.AssertExpectations(t)
 }
 
@@ -176,7 +179,7 @@ func TestAuthHandler_Login(t *testing.T) {
 	mockSvc := new(mocks.MockAuthService)
 	router := setupAuthRouter(mockSvc)
 
-	user := &domain.User{ID: bson.NewObjectID(), Email: "test@example.com"}
+	user := &dto.UserResponse{ID: bson.NewObjectID().Hex(), Email: "test@example.com", AuthMethod: "local"}
 	tokens := &dto.TokenPair{AccessToken: "access.token", RefreshToken: "refresh.token"}
 
 	mockSvc.On("Login", mock.Anything, mock.AnythingOfType("dto.LoginRequestDTO")).
@@ -198,19 +201,23 @@ func TestAuthHandler_OAuth(t *testing.T) {
 	mockSvc := new(mocks.MockAuthService)
 	router := setupAuthRouter(mockSvc)
 
-	user := &domain.User{ID: bson.NewObjectID(), Email: "oauth@example.com", Username: "oauthuser"}
+	user := &dto.UserResponse{ID: bson.NewObjectID().Hex(), Email: "oauth@example.com", AuthMethod: "oauth_google"}
 	tokens := &dto.TokenPair{AccessToken: "access.token", RefreshToken: "refresh.token"}
 
 	t.Run("New User", func(t *testing.T) {
-		mockSvc.On("OAuth", mock.Anything, "valid.token").Return(user, nil, true, nil).Once()
+		mockSvc2 := new(mocks.MockAuthService)
+		r2 := setupAuthRouter(mockSvc2)
+		mockSvc2.On("OAuth", mock.Anything, "valid.token").Return(user, tokens, true, nil).Once()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/oauth", nil)
 		req.Header.Set("Authorization", "Bearer valid.token")
 
 		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
+		r2.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
+		assert.Contains(t, w.Body.String(), "access_token")
+		mockSvc2.AssertExpectations(t)
 	})
 
 	t.Run("Existing User", func(t *testing.T) {
@@ -224,6 +231,7 @@ func TestAuthHandler_OAuth(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Body.String(), "access_token")
+		mockSvc.AssertExpectations(t)
 	})
 }
 

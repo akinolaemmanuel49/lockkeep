@@ -4,22 +4,32 @@ import { Link, useLocation } from "react-router";
 export default function NavLink({
   to,
   children,
+  matchPrefix = false,
 }: {
   to: string;
   children: React.ReactNode;
+  matchPrefix?: boolean;
 }) {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  const isActive = matchPrefix
+    ? location.pathname === to || location.pathname.startsWith(`${to}/`)
+    : location.pathname === to;
 
   return (
     <Link
       to={to}
-      className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+      className={`group inline-flex items-center rounded-md px-3 py-2 text-[0.8125rem] font-medium uppercase tracking-[0.1em] transition-colors ${
         isActive
-          ? "bg-slate-800 text-slate-100"
-          : "text-slate-400 hover:text-slate-200"
+          ? "text-brass-300"
+          : "text-sand-400 hover:text-ivory"
       }`}
     >
+      <span
+        aria-hidden="true"
+        className={`mr-2 h-3.5 w-px bg-current transition-opacity ${
+          isActive ? "opacity-80" : "opacity-20 group-hover:opacity-60"
+        }`}
+      />
       {children}
     </Link>
   );

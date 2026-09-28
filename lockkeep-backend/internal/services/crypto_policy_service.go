@@ -2,9 +2,11 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	repository "github.com/akinolaemmanuel49/lockkeep-backend/internal/repositories"
 )
 
@@ -16,17 +18,29 @@ func NewCryptoPolicyService(policyRepo *repository.CryptoPolicyRepository) *Cryp
 	return &CryptoPolicyService{policyRepo: policyRepo}
 }
 
+var _ ports.CryptoPolicyService = (*CryptoPolicyService)(nil)
+
 func (s *CryptoPolicyService) GetCurrentPolicy(ctx context.Context) (*domain.CryptoPolicy, error) {
 	return s.policyRepo.GetCurrent(ctx)
 }
 
+var ErrNothingToUpdate = errors.New("crypto policy update payload is empty")
+
 func (s *CryptoPolicyService) SetCurrentPolicy(ctx context.Context, policy *dto.SetCurrentPolicy) error {
+	if policy == nil || policy.KDFParams.Algorithm == "" {
+		return ErrNothingToUpdate
+	}
+
 	currentPolicy, err := s.policyRepo.GetCurrent(ctx)
 	if err != nil {
 		return err
 	}
 
-	version := currentPolicy.Version + 1
+	version := uint32(1)
+	if currentPolicy != nil {
+		version = currentPolicy.Version + 1
+	}
+
 	newPolicy := s.toPolicy(policy, version)
 
 	return s.policyRepo.SetCurrent(ctx, newPolicy)

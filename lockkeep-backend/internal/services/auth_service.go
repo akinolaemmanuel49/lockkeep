@@ -46,8 +46,9 @@ func NewAuthService(
 	}
 }
 
-// Register creates a new user with local authentication
-func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO) (*domain.User, error) {
+// Register creates a new user with local authentication and immediately issues
+// a token pair (register == login).
+func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO) (*dto.UserResponse, *dto.TokenPair, error) {
 	var createdUser *domain.User
 
 	err := s.unitOfWork.Within(ctx, func(txCtx context.Context) error {
@@ -74,7 +75,7 @@ func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO
 			return err
 		}
 		// Feels weird, might be better off manually passing timestamps
-		createdUser, err = s.userRepo.FindByID(ctx, user.ID)
+		createdUser, err = s.userRepo.FindByID(txCtx, user.ID)
 		if err != nil {
 			return err
 		}
@@ -94,14 +95,20 @@ func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return createdUser, nil
+	claims := s.buildClaims(ctx, createdUser)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return dto.SerializeUser(createdUser, domain.AuthMethodLocal, claims.SystemRole), tokens, nil
 }
 
 // Login validates credentials and returns user + token pair
-func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*domain.User, *dto.TokenPair, error) {
+func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*dto.UserResponse, *dto.TokenPair, error) {
 	user, err := s.userRepo.FindByEmail(ctx, input.Email)
 	if err != nil {
 		return nil, nil, err
@@ -139,7 +146,7 @@ func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*do
 		return nil, nil, err
 	}
 
-	return user, tokens, nil
+	return dto.SerializeUser(user, domain.AuthMethodLocal, claims.SystemRole), tokens, nil
 }
 
 func (s *AuthService) Me(ctx context.Context, userID string) (*domain.User, error) {
@@ -200,7 +207,7 @@ func extractProvider(sub string) (domain.AuthMethod, error) {
 }
 
 // OAuth handles OAuth registration/login
-func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.User, *dto.TokenPair, bool, error) {
+func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*dto.UserResponse, *dto.TokenPair, bool, error) {
 	userInfo, err := s.getAuth0UserInfo(accessToken)
 	if err != nil {
 		return nil, nil, false, err
@@ -225,7 +232,6 @@ func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.Us
 
 	var user *domain.User
 	var isNewUser bool
-	var tokens *dto.TokenPair
 
 	if identity != nil {
 		user, err = s.userRepo.FindByID(ctx, identity.UserID)
@@ -240,27 +246,30 @@ func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*domain.Us
 		_ = s.identityRepo.RecordLogin(ctx, identity.ID)
 
 		isNewUser = false
-
-		claims := s.buildClaims(ctx, user)
-		tokens, err = s.jwtManager.GeneratePair(claims)
-		if err != nil {
-			return nil, nil, isNewUser, err
-		}
-
 	} else {
-		user, err = s.registerOAuthUser(ctx, input)
+		user, isNewUser, err = s.registerOAuthUser(ctx, input)
 		if err != nil {
 			return nil, nil, false, err
 		}
-
-		isNewUser = true
 	}
 
-	return user, tokens, isNewUser, nil
+	// New, existing, and newly-linked OAuth users all receive a token pair so
+	// the client can authenticate immediately (and proceed to vault setup).
+	claims := s.buildClaims(ctx, user)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, isNewUser, err
+	}
+
+	return dto.SerializeUser(user, provider, claims.SystemRole), tokens, isNewUser, nil
 }
 
-func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuthorizeDTO) (*domain.User, error) {
-	var createdOauthUser *domain.User
+// registerOAuthUser creates a user + OAuth identity, or links a new OAuth
+// identity to an existing account (same email). Returns the user and whether a
+// brand-new account was created.
+func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuthorizeDTO) (*domain.User, bool, error) {
+	var resultUser *domain.User
+	var isNewUser bool
 
 	err := s.unitOfWork.Within(ctx, func(txCtx context.Context) error {
 		existing, err := s.userRepo.FindByEmail(txCtx, input.Email)
@@ -271,6 +280,7 @@ func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuth
 		var userID bson.ObjectID
 		if existing != nil {
 			userID = existing.ID
+			resultUser = existing
 		} else {
 			user := &domain.User{
 				ID:       bson.NewObjectID(),
@@ -281,7 +291,8 @@ func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuth
 				return err
 			}
 			userID = user.ID
-			createdOauthUser = user
+			resultUser = user
+			isNewUser = true
 		}
 
 		identity := &domain.Identity{
@@ -299,10 +310,10 @@ func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuth
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return createdOauthUser, nil
+	return resultUser, isNewUser, nil
 }
 
 func (s *AuthService) buildClaims(ctx context.Context, user *domain.User) jwt.Claims {
@@ -397,7 +408,9 @@ func (s *AuthService) SetVerificationHash(ctx context.Context, userID bson.Objec
 }
 
 // GetKDFParams returns the KDF parameters stored for the user's vault so the
-// client can re-derive the master key for a given password.
+// client can re-derive the master key for a given password. For users without
+// a vault yet (vault setup), it returns the default server-side parameters; the
+// client supplies a fresh salt at setup time.
 func (s *AuthService) GetKDFParams(ctx context.Context, userID bson.ObjectID) (*domain.KDFParams, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -407,16 +420,25 @@ func (s *AuthService) GetKDFParams(ctx context.Context, userID bson.ObjectID) (*
 		return nil, ErrUserNotFound
 	}
 	if user.Vault == nil || user.Vault.KDF.Salt == "" {
-		return nil, ErrVaultNotFound
+		return defaultKDFParams(), nil
 	}
 
 	return &user.Vault.KDF, nil
 }
 
+func defaultKDFParams() *domain.KDFParams {
+	return &domain.KDFParams{
+		Algorithm:   "argon2id",
+		Memory:      65536,
+		Iterations:  3,
+		Parallelism: 4,
+	}
+}
+
 // UpdateEmail changes the account email and re-issues tokens, since email is a
 // JWT claim. Only required for users with a local identity; OAuth-only users
 // must manage their email at the provider.
-func (s *AuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*domain.User, *dto.TokenPair, error) {
+func (s *AuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*dto.UserResponse, *dto.TokenPair, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, nil, err
@@ -452,7 +474,7 @@ func (s *AuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req
 		return nil, nil, err
 	}
 
-	return user, tokens, nil
+	return dto.SerializeUser(user, domain.AuthMethodLocal, claims.SystemRole), tokens, nil
 }
 
 // UpdateAccountPassword validates the current password against the local

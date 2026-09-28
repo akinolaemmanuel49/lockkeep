@@ -16,20 +16,39 @@ type MockAuthService struct {
 
 var _ ports.AuthService = (*MockAuthService)(nil)
 
-func (m *MockAuthService) Register(ctx context.Context, input dto.RegisterRequestDTO) (*domain.User, error) {
+func (m *MockAuthService) Register(ctx context.Context, input dto.RegisterRequestDTO) (*dto.UserResponse, *dto.TokenPair, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*domain.User), args.Error(1)
+	var user *dto.UserResponse
+	if v := args.Get(0); v != nil {
+		user = v.(*dto.UserResponse)
+	}
+	var tokens *dto.TokenPair
+	if v := args.Get(1); v != nil {
+		tokens = v.(*dto.TokenPair)
+	}
+	return user, tokens, args.Error(2)
 }
 
-func (m *MockAuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*domain.User, *dto.TokenPair, error) {
+func (m *MockAuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*dto.UserResponse, *dto.TokenPair, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*domain.User), args.Get(1).(*dto.TokenPair), args.Error(2)
+	var user *dto.UserResponse
+	if v := args.Get(0); v != nil {
+		user = v.(*dto.UserResponse)
+	}
+	var tokens *dto.TokenPair
+	if v := args.Get(1); v != nil {
+		tokens = v.(*dto.TokenPair)
+	}
+	return user, tokens, args.Error(2)
 }
 
-func (m *MockAuthService) OAuth(ctx context.Context, accessToken string) (*domain.User, *dto.TokenPair, bool, error) {
+func (m *MockAuthService) OAuth(ctx context.Context, accessToken string) (*dto.UserResponse, *dto.TokenPair, bool, error) {
 	args := m.Called(ctx, accessToken)
 
-	user := args.Get(0).(*domain.User)
+	var user *dto.UserResponse
+	if v := args.Get(0); v != nil {
+		user = v.(*dto.UserResponse)
+	}
 	var tokens *dto.TokenPair
 	if arg1 := args.Get(1); arg1 != nil {
 		tokens = arg1.(*dto.TokenPair)
@@ -64,11 +83,11 @@ func (m *MockAuthService) GetKDFParams(ctx context.Context, userID bson.ObjectID
 	return nil, args.Error(1)
 }
 
-func (m *MockAuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*domain.User, *dto.TokenPair, error) {
+func (m *MockAuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*dto.UserResponse, *dto.TokenPair, error) {
 	args := m.Called(ctx, userID, req)
-	var user *domain.User
+	var user *dto.UserResponse
 	if v := args.Get(0); v != nil {
-		user = v.(*domain.User)
+		user = v.(*dto.UserResponse)
 	}
 	var tokens *dto.TokenPair
 	if v := args.Get(1); v != nil {

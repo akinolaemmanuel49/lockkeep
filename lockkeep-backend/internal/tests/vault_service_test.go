@@ -88,14 +88,41 @@ func TestVaultService_GetVaultByUserID(t *testing.T) {
 	})
 
 	t.Run("vault not found", func(t *testing.T) {
-		svc, vaultRepo, _ := newTestVaultService()
+		svc, vaultRepo, userRepo := newTestVaultService()
 
 		userID := bson.NewObjectID()
+		user := &domain.User{ID: userID, Username: "testuser"}
 		vaultRepo.On("FindByUser", mock.Anything, userID).Return(nil, nil).Once()
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
 
 		_, err := svc.GetVaultByUserID(context.Background(), userID.Hex())
 		assert.ErrorIs(t, err, services.ErrVaultNotFound)
 		vaultRepo.AssertExpectations(t)
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("creates profile for user with vault metadata", func(t *testing.T) {
+		svc, vaultRepo, userRepo := newTestVaultService()
+
+		userID := bson.NewObjectID()
+		user := &domain.User{
+			ID:       userID,
+			Username: "testuser",
+			Vault:    &domain.VaultMetadata{Version: 1, VerificationHash: "hash"},
+		}
+		vaultRepo.On("FindByUser", mock.Anything, userID).Return(nil, nil).Once()
+		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
+		vaultRepo.On("Create", mock.Anything, mock.MatchedBy(func(v *domain.Vault) bool {
+			return v.UserID == userID && v.Vaultname == "testuser"
+		})).Return(nil).Once()
+
+		result, err := svc.GetVaultByUserID(context.Background(), userID.Hex())
+
+		assert.NoError(t, err)
+		assert.Equal(t, userID, result.UserID)
+		assert.Equal(t, "testuser", result.Vaultname)
+		vaultRepo.AssertExpectations(t)
+		userRepo.AssertExpectations(t)
 	})
 
 	t.Run("invalid user id", func(t *testing.T) {

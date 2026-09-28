@@ -8,6 +8,8 @@ export default [
     route("dashboard", "routes/dashboard.tsx"),
     route("settings", "routes/settings.tsx"),
     route("callback", "routes/callback.tsx"),
+    route("workspaces", "routes/workspaces.tsx"),
+    route("workspaces/:slug", "routes/workspace.$slug.tsx"),
     layout("routes/_admin.tsx", [
         route("admin/policy", "routes/_admin-policy.tsx"),
     ]),

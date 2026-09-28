@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import type { VaultItem } from "~/types/index";
+import Nameplate from "./Nameplate";
 
 interface PasswordItemModalProps {
   isOpen: boolean;
   item: VaultItem | null;
-  decryptedSecret: string | null; // NEW: plaintext secret for editing
+  decryptedSecret: string | null;
   onClose: () => void;
   onSave: (data: {
     name: string;
@@ -39,7 +40,7 @@ export default function PasswordItemModal({
       setName(item.name);
       setSiteUrl((item.metadata?.siteUrl as string) || "");
       setIdentifier((item.metadata?.identifier as string) || "");
-      setPassword(decryptedSecret || ""); // NEW: use decrypted secret if available
+      setPassword(decryptedSecret || "");
       setNotes((item.metadata?.notes as string) || "");
     } else if (isOpen) {
       setName("");
@@ -49,7 +50,7 @@ export default function PasswordItemModal({
       setNotes("");
     }
     setError("");
-  }, [isOpen, item, decryptedSecret]); // NEW: depend on decryptedSecret
+  }, [isOpen, item, decryptedSecret]);
 
   const generatePassword = () => {
     const chars =
@@ -85,22 +86,26 @@ export default function PasswordItemModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-coal-950/85 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6"
+        className="plate w-full max-w-lg p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-100">
-            {isEditing ? "Edit Password" : "Add Password"}
-          </h2>
+        <div className="mb-4 flex items-center justify-between border-b border-brass-500/15 pb-4">
+          <div>
+            <Nameplate>{isEditing ? "Edit Record" : "New Record"}</Nameplate>
+            <h2 className="mt-1.5 font-display text-xl font-medium text-ivory">
+              {isEditing ? "Edit Password" : "Add Password"}
+            </h2>
+          </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 hover:text-slate-300"
+            className="rounded-lg p-1.5 text-sand-600 transition-colors hover:text-ivory"
+            aria-label="Close"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -108,39 +113,41 @@ export default function PasswordItemModal({
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+          <div className="mb-4 rounded-lg border border-vermillion-500/30 bg-vermillion-500/10 px-4 py-2 text-sm text-vermillion-300">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
-              Name / Organization *
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
+              Record Name *
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., GitHub, AWS, Stripe"
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
+              className="lk-input"
               autoFocus
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">Site URL</label>
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
+              Site URL
+            </label>
             <input
               type="url"
               value={siteUrl}
               onChange={(e) => setSiteUrl(e.target.value)}
               placeholder="https://..."
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
+              className="lk-input"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
               Identifier (Email / Username) *
             </label>
             <input
@@ -148,12 +155,14 @@ export default function PasswordItemModal({
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder="user@example.com"
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
+              className="lk-input"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">Password *</label>
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
+              Password *
+            </label>
             <div className="flex gap-2">
               <input
                 type={showPassword ? "text" : "password"}
@@ -161,12 +170,13 @@ export default function PasswordItemModal({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={isEditing ? "Leave blank to keep current" : "Enter or generate password"}
                 required={!isEditing}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none"
+                className="lk-input flex-1"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-400 hover:text-slate-200"
+                className="lk-btn lk-btn--ghost px-3"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -183,7 +193,7 @@ export default function PasswordItemModal({
               <button
                 type="button"
                 onClick={generatePassword}
-                className="rounded-lg border border-slate-700 bg-slate-950 px-4 text-sm font-medium text-sky-400 hover:text-sky-300"
+                className="lk-btn lk-btn--brass-text px-4 text-xs"
               >
                 Generate
               </button>
@@ -191,29 +201,28 @@ export default function PasswordItemModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-400">Notes</label>
+            <label className="text-xs font-semibold uppercase tracking-[0.14em] text-sand-500">
+              Notes
+            </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Additional information..."
               rows={3}
-              className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-400 focus:outline-none resize-y min-h-[80px]"
+              className="lk-input resize-y min-h-[76px]"
             />
           </div>
 
-          <div className="mt-2 flex gap-3 justify-end border-t border-slate-800 pt-4">
+          <div className="mt-2 flex justify-end gap-3 border-t border-brass-500/15 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200"
+              className="lk-btn lk-btn--ghost"
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300"
-            >
-              {isEditing ? "Update" : "Save"}
+            <button type="submit" className="lk-btn lk-btn--primary">
+              {isEditing ? "Update Record" : "File Record"}
             </button>
           </div>
         </form>

@@ -128,11 +128,20 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      currentPolicy.current = await getCurrentPolicy();
+      try {
+        currentPolicy.current = await getCurrentPolicy();
+      } catch (err) {
+        console.error("Failed to load crypto policy:", err);
+        return;
+      }
+
+      if (!currentPolicy.current) return;
       currentKDFParams.current = currentPolicy.current.kdfParams;
 
       const needsKdfUpgrade =
-        userKdf && !isSameKdfPolicy(currentKDFParams.current!, userKdf);
+        userKdf && currentKDFParams.current
+          ? !isSameKdfPolicy(currentKDFParams.current, userKdf)
+          : false;
 
       setUpdateKdf(!!needsKdfUpgrade);
     };

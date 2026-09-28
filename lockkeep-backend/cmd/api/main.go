@@ -6,9 +6,11 @@ import (
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/repositories"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/services"
 	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
@@ -45,7 +47,7 @@ func main() {
 	vaultItemRepo := repositories.NewVaultItemRepository(rawDB)
 	// sharedSecretRepo := repository.NewSharedSecretRepository(rawDB)
 	// auditRepo := repository.NewAuditRepository(rawDB)
-	// cryptoPolicyRepo := repository.NewCryptoPolicyRepository(rawDB)
+	cryptoPolicyRepo := repositories.NewCryptoPolicyRepository(rawDB)
 
 	// Ensure indexes
 	indexRepos := []interface{ EnsureIndexes(context.Context) error }{
@@ -74,7 +76,13 @@ func main() {
 	vaultItemService := services.NewVaultItemService(vaultItemRepo)
 	// sharedSecretService := service.NewSharedSecretService(sharedSecretRepo, auditRepo)
 	// auditService := service.NewAuditService(auditRepo)
-	// cryptoPolicyService := service.NewCryptoPolicyService(cryptoPolicyRepo)
+	cryptoPolicyService := services.NewCryptoPolicyService(cryptoPolicyRepo)
+
+	// Seed the default crypto policy so clients always have parameters to
+	// derive keys against (no-op when a policy already exists).
+	if err := seedDefaultCryptoPolicy(ctx, cryptoPolicyService); err != nil {
+		log.Fatalf("seed default crypto policy: %v", err)
+	}
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -82,6 +90,7 @@ func main() {
 	orgHandler := handlers.NewOrganizationHandler(orgService)
 	teamHandler := handlers.NewTeamHandler(teamService)
 	vaultHandler := handlers.NewVaultHandler(vaultService, vaultItemService)
+	cryptoPolicyHandler := handlers.NewCryptoPolicyHandler(cryptoPolicyService)
 
 	// Middleware
 	authMiddleware := middleware.Auth(jwtManager)
@@ -153,6 +162,15 @@ func main() {
 		}
 	}
 
+	// Crypto policy routes (system-wide KDF parameters). Writes require the
+	// system admin role.
+	cryptoPolicy := v2.Group("/crypto-policy")
+	cryptoPolicy.Use(authMiddleware)
+	{
+		cryptoPolicy.GET("/current", cryptoPolicyHandler.GetCurrentPolicy)
+		cryptoPolicy.POST("/current", cryptoPolicyHandler.SetCurrentPolicy)
+	}
+
 	port := cfg.Port
 	log.Printf("Server starting on :%s", port)
 	if err := r.Run(":" + port); err != nil {
@@ -176,4 +194,30 @@ func corsMiddleware(allowedOrigins map[string]struct{}) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// seedDefaultCryptoPolicy writes the initial crypto policy (argon2id defaults)
+// on first boot so clients always have KDF parameters to derive keys against.
+func seedDefaultCryptoPolicy(ctx context.Context, p ports.CryptoPolicyService) error {
+	current, err := p.GetCurrentPolicy(ctx)
+	if err != nil {
+		return err
+	}
+	if current != nil {
+		log.Printf("Crypto policy already seeded (version %d)", current.Version)
+		return nil
+	}
+
+	defaultPolicy := &dto.SetCurrentPolicy{}
+	defaultPolicy.KDFParams.Algorithm = "argon2id"
+	defaultPolicy.KDFParams.Memory = 65536
+	defaultPolicy.KDFParams.Iterations = 3
+	defaultPolicy.KDFParams.Parallelism = 4
+
+	if err := p.SetCurrentPolicy(ctx, defaultPolicy); err != nil {
+		return err
+	}
+
+	log.Println("Seeded default crypto policy (argon2id v1)")
+	return nil
 }

@@ -57,9 +57,36 @@ func (s *VaultService) GetVaultByUserID(ctx context.Context, userID string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if vault == nil {
+	if vault != nil {
+		return vault, nil
+	}
+
+	// No profile yet — create one on first access for users who have already
+	// completed vault setup (their encryption metadata lives on the account).
+	user, err := s.userRepo.FindByID(ctx, objID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	if user.Vault == nil || user.Vault.VerificationHash == "" {
 		return nil, ErrVaultNotFound
 	}
+
+	vaultname := "My Vault"
+	if user.Username != "" {
+		vaultname = user.Username
+	}
+
+	vault = &domain.Vault{
+		UserID:    objID,
+		Vaultname: vaultname,
+	}
+	if err := s.VaultRepo.Create(ctx, vault); err != nil {
+		return nil, err
+	}
+
 	return vault, nil
 }
 

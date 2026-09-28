@@ -39,7 +39,7 @@ export default function OAuthButton({
     <button
       onClick={onClick}
       disabled={isLoading}
-      className="flex items-center justify-center gap-3 rounded-lg border border-slate-700 bg-slate-950 py-3 text-sm font-medium text-slate-300 hover:border-slate-600 hover:text-slate-100 disabled:opacity-50 cursor-pointer"
+      className="lk-btn lk-btn--ghost w-full py-3"
     >
       {icons[provider]}
       Continue with {provider === "google" ? "Google" : "GitHub"}

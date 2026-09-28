@@ -14,9 +14,12 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 FROM deps AS build
 
-COPY . .
+ARG VITE_AUTH0_DOMAIN
+ARG VITE_AUTH0_CLIENT_ID
+ARG VITE_AUTH0_REDIRECT_URI
+ARG VITE_LOCKKEEP_API_URI
 
-ENV VITE_LOCKKEEP_API_URI="http://api.lockkeep.localhost/api/v1"
+COPY . .
 
 RUN pnpm run build
 

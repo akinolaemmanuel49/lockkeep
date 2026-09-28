@@ -33,7 +33,8 @@ export async function createVaultItem(
         throw new Error(err.error || "Failed to add item to vault");
     }
 
-    return res.json();
+    const data = await res.json();
+    return data.item;
 }
 
 export async function fetchVaultItems(): Promise<VaultItem[]> {
@@ -46,7 +47,8 @@ export async function fetchVaultItems(): Promise<VaultItem[]> {
         throw new Error(err.error || "Failed to fetch vault items");
     }
 
-    return res.json();
+    const data = await res.json();
+    return data.items;
 }
 
 export async function updateVaultItem(
@@ -65,7 +67,8 @@ export async function updateVaultItem(
         throw new Error(err.error || "Failed to update vault item");
     }
 
-    return res.json();
+    const data = await res.json();
+    return data.item;
 }
 
 export async function deleteVaultItem(itemId: string): Promise<void> {

@@ -29,10 +29,10 @@ export interface User {
     id: string;
     email: string;
     tenantId: string;
+    systemRole: string;
     hasMasterPassword: boolean;
     authMethod?: string;
     vault?: VaultMetadata;
-    userType: "admin" | "user";   // NEW
 }
 
 export interface Secret {
@@ -61,6 +61,7 @@ export type Credential = VaultItem;
 // ─── Auth DTOs ──────────────────────────────────────────────────
 
 export interface LocalRegisterRequest {
+    username: string;
     email: string;
     password: string;
 }
@@ -122,4 +123,30 @@ export interface SetCurrentPolicyRequest {
         iterations: number;
         parallelism: number;
     }
+}
+
+// ─── Workspace (organization) DTOs ───────────────────────────────
+
+export interface WorkspaceSettings {
+    require2FA: boolean;
+    defaultTeamRole: string;
+}
+
+export interface Workspace {
+    id: string;
+    name: string;
+    slug: string;
+    ownerId: string;
+    settings: WorkspaceSettings;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface WorkspaceTeam {
+    id: string;
+    organizationId: string;
+    name: string;
+    slug: string;
+    createdAt: string;
+    updatedAt: string;
 }

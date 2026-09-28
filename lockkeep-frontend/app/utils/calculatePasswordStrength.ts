@@ -8,12 +8,12 @@ export const strengthLabels = [
 ];
 
 export const strengthColors = [
-    "bg-red-500",
-    "bg-red-400",
-    "bg-amber-400",
-    "bg-lime-400",
-    "bg-green-400",
-    "bg-emerald-500",
+    "bg-vermillion-500",
+    "bg-vermillion-400",
+    "bg-vermillion-400",
+    "bg-brass-400",
+    "bg-patina-400",
+    "bg-patina-500",
 ];
 
 export const calculatePasswordStrength = (pw: string): number => {

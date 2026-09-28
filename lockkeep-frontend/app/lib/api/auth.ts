@@ -29,7 +29,11 @@ export async function localRegisterUser(
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: newUser.email, password: newUser.password }),
+        body: JSON.stringify({
+            username: newUser.username,
+            email: newUser.email,
+            password: newUser.password,
+        }),
     });
 
     if (!res.ok) {

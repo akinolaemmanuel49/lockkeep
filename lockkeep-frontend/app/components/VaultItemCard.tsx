@@ -50,16 +50,20 @@ export default function VaultItemCard({
 
   const maskSecret = () => "••••••••••";
 
+  const iconButton =
+    "shrink-0 rounded p-1.5 text-sand-600 transition-colors hover:text-brass-300 hover:bg-brass-500/10";
+
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <div className="plate flex flex-col p-5">
+      {/* Record header */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-400">
+            <span className="inline-flex items-center rounded border border-brass-500/30 bg-brass-500/10 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-brass-300">
               {item.type.replace("_", " ")}
             </span>
           </div>
-          <h3 className="mt-1 truncate text-base font-semibold text-slate-100">
+          <h3 className="mt-2 truncate font-display text-lg font-medium text-ivory">
             {item.name}
           </h3>
           {siteUrl && (
@@ -67,29 +71,29 @@ export default function VaultItemCard({
               href={siteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 block truncate text-sm text-sky-400 hover:text-sky-300"
+              className="mt-0.5 block truncate text-sm text-brass-400 hover:text-brass-300"
             >
               {siteUrl.replace(/^https?:\/\//, "")}
             </a>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex shrink-0 gap-1">
           <button
             onClick={() => onEdit(item)}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
-            title="Edit"
+            className={`${iconButton}`}
+            title="Edit record"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </button>
           <button
             onClick={() => onDelete(item.id)}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-800 hover:text-red-400"
-            title="Delete"
+            className={`${iconButton} hover:text-vermillion-400`}
+            title="Delete record"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
@@ -97,24 +101,27 @@ export default function VaultItemCard({
         </div>
       </div>
 
-      <div className="my-4 h-px bg-slate-800" />
+      <div className="engraved my-4 text-xs opacity-60">
+        <span className="diamond" aria-hidden="true" />
+      </div>
 
+      {/* Record body */}
       <div className="flex flex-col gap-4">
         {identifier && (
           <div>
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
+            <span className="text-[0.625rem] font-semibold uppercase tracking-[0.22em] text-sand-600">
               Identifier
             </span>
             <div className="mt-1 flex items-center gap-2">
-              <span className="flex-1 truncate text-sm text-slate-300">
+              <span className="flex-1 truncate font-mono text-sm text-sand-300">
                 {identifier}
               </span>
               <button
                 onClick={copyIdentifier}
-                className="shrink-0 rounded p-1 text-slate-600 hover:text-slate-300"
+                className={`${iconButton} scale-90`}
                 title="Copy identifier"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
@@ -124,26 +131,26 @@ export default function VaultItemCard({
         )}
 
         <div>
-          <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
+          <span className="text-[0.625rem] font-semibold uppercase tracking-[0.22em] text-sand-600">
             Password
           </span>
           <div className="mt-1 flex items-center gap-2">
-            <code className="flex-1 truncate font-mono text-sm text-slate-300 tracking-wider">
+            <code className="flex-1 truncate font-mono text-sm tracking-[0.14em] text-ivory">
               {showSecret && secret ? secret : maskSecret()}
             </code>
-            <div className="flex gap-1">
+            <div className="flex gap-0.5">
               <button
                 onClick={handleToggleSecret}
-                className="rounded p-1 text-slate-600 hover:text-slate-300"
-                title={showSecret ? "Hide" : "Show"}
+                className={`${iconButton} scale-90`}
+                title={showSecret ? "Hide" : "Reveal"}
               >
                 {showSecret ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
                     <line x1="1" y1="1" x2="23" y2="23" />
                   </svg>
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>
@@ -151,15 +158,15 @@ export default function VaultItemCard({
               </button>
               <button
                 onClick={handleCopySecret}
-                className="rounded p-1 text-slate-600 hover:text-slate-300"
+                className={`${iconButton} scale-90`}
                 title="Copy password"
               >
                 {copied ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#63ae85" strokeWidth="2">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
@@ -171,17 +178,21 @@ export default function VaultItemCard({
 
         {notes && (
           <div>
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-600">
+            <span className="text-[0.625rem] font-semibold uppercase tracking-[0.22em] text-sand-600">
               Notes
             </span>
-            <p className="mt-1 text-sm text-slate-500">{notes}</p>
+            <p className="mt-1 text-sm text-sand-400">{notes}</p>
           </div>
         )}
       </div>
 
-      <div className="mt-4 pt-3 border-t border-slate-800">
-        <span className="text-xs text-slate-700">
-          Updated {new Date(item.updatedAt).toLocaleDateString()}
+      <div className="mt-4 flex items-center gap-2 border-t border-brass-500/10 pt-3">
+        <span className="text-[0.625rem] uppercase tracking-[0.18em] text-sand-600">
+          Index Record
+        </span>
+        <span className="h-px flex-1 bg-brass-500/15" />
+        <span className="font-mono text-[0.625rem] text-sand-600">
+          {new Date(item.updatedAt).toLocaleDateString()}
         </span>
       </div>
     </div>

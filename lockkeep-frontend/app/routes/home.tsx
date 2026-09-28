@@ -2,6 +2,8 @@ import type { Route } from "./+types/home";
 import { Link } from "react-router";
 
 import { requireGuest } from "~/lib/auth-guard";
+import VaultDial from "~/components/VaultDial";
+import Nameplate from "~/components/Nameplate";
 
 export const clientLoader = () => {
   return requireGuest();
@@ -9,7 +11,7 @@ export const clientLoader = () => {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "LockKeep - Zero-Trust Password Vault" },
+    { title: "LockKeep — Zero-Trust Password Vault" },
     {
       name: "description",
       content:
@@ -31,111 +33,41 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center px-4 text-center">
-      <div className="mb-6 text-sky-400">
-        <svg
-          width="64"
-          height="64"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
+    <div className="flex flex-col items-center justify-center gap-14 py-12 text-center md:flex-row md:gap-20 md:py-20 md:text-left">
+      {/* Dial */}
+      <div className="relative shrink-0">
+        <div
+          aria-hidden="true"
+          className="absolute -inset-10 rounded-full bg-[radial-gradient(closest-side,rgba(201,162,39,0.16),transparent)]"
+        />
+        <VaultDial size={224} spinning pointer="0" className="relative" />
       </div>
 
-      <h1 className="mb-4 text-4xl font-bold tracking-tight text-slate-100">
-        Zero-Trust Password Vault
-      </h1>
+      {/* Copy */}
+      <div className="max-w-xl">
+        <Nameplate className="justify-center md:justify-start">
+          Mission Control
+        </Nameplate>
 
-      <p className="mb-10 max-w-lg text-lg text-slate-400">
-        Your credentials are encrypted on your device before they ever reach our
-        servers. We cannot see, access, or decrypt your passwords. Ever.
-      </p>
+        <h1 className="mt-4 font-display text-4xl font-semibold leading-tight tracking-tight text-ivory sm:text-5xl">
+          Your secrets, <span className="text-brass-sheen">locked in.</span>
+        </h1>
 
-      <div className="mb-10 flex flex-wrap justify-center gap-8">
-        <Feature
-          icon="shield"
-          text="Client-side encryption"
-          color="text-green-400"
-        />
-        <Feature
-          icon="lock"
-          text="Vault password protected"
-          color="text-amber-400"
-        />
-        <Feature
-          icon="users"
-          text="Multi-tenant isolation"
-          color="text-violet-400"
-        />
+        <p className="mt-5 max-w-md text-base leading-relaxed text-sand-400">
+          Every credential is encrypted on your device before it ever crosses
+          the wire. We cannot see, access, or decrypt your passwords. That's the
+          point of the vault.
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4 md:justify-start">
+          <Link to="/signup" className="lk-btn lk-btn--primary px-7 py-3 text-sm">
+            Open Your Vault
+          </Link>
+          <Link to="/login" className="lk-btn lk-btn--ghost px-7 py-3 text-sm">
+            Sign In
+          </Link>
+        </div>
       </div>
-
-      <div className="flex gap-4">
-        <Link
-          to="/signup"
-          className="rounded-xl bg-sky-400 px-8 py-3.5 text-base font-semibold text-slate-950 hover:bg-sky-300"
-        >
-          Get Started
-        </Link>
-        <Link
-          to="/login"
-          className="rounded-xl border border-slate-700 px-8 py-3.5 text-base font-medium text-slate-200 hover:border-slate-600"
-        >
-          Sign In
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function Feature({
-  icon,
-  text,
-  color,
-}: {
-  icon: "shield" | "lock" | "users";
-  text: string;
-  color: string;
-}) {
-  const paths = {
-    shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
-    lock: (
-      <>
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </>
-    ),
-    users: (
-      <>
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </>
-    ),
-  };
-
-  return (
-    <div className="flex items-center gap-2.5">
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={color}
-      >
-        {paths[icon]}
-      </svg>
-      <span className="text-sm font-medium text-slate-300">{text}</span>
     </div>
   );
 }

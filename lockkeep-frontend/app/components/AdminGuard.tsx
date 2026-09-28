@@ -8,7 +8,7 @@ export default function AdminGuard() {
         return <Navigate to="/login" replace />;
     }
 
-    if (user?.userType !== "admin") {
+    if (user?.systemRole !== "system:admin") {
         return <Navigate to="/unauthorized" replace />;
     }
 

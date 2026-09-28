@@ -11,6 +11,7 @@ import {
 import { AuthProvider, useAuth } from "./providers/auth";
 import { VaultProvider, useVault } from "./providers/vault";
 import NavLink from "./components/NavLink";
+import BrandLock from "./components/BrandLock";
 import type { Route } from "./+types/root";
 import { ToastProvider } from "./providers/toast";
 import ToastContainer from "./components/ToastContainer";
@@ -24,7 +25,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300..700&display=swap",
   },
 ];
 
@@ -62,9 +63,9 @@ function Layout() {
         <Links />
       </head>
       <body>
-        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans antialiased">
-          <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950">
-            <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <div className="lk-ambient flex min-h-screen flex-col font-sans text-ivory antialiased">
+          <header className="sticky top-0 z-50 border-b border-brass-500/20 bg-coal-950/85 backdrop-blur">
+            <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-6">
               <Logo />
               {isAuthenticated && <Nav />}
               <Actions
@@ -76,9 +77,20 @@ function Layout() {
             </div>
           </header>
 
-          <main className="mx-auto max-w-6xl px-6 py-8">
+          <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
             <Outlet />
           </main>
+
+          <footer className="border-t border-brass-500/10 py-5">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 text-[0.6875rem] uppercase tracking-[0.3em] text-sand-600">
+              <span>LockKeep Vault</span>
+              <span className="font-mono tracking-[0.22em]">
+                {/* design-time distinction: v2 workspace-aware UI */}
+                v2 :: workspace-aware
+              </span>
+            </div>
+          </footer>
+
           <ToastContainer />
         </div>
       </body>
@@ -88,33 +100,39 @@ function Layout() {
 
 function Logo() {
   return (
-    <Link to="/" className="flex items-center gap-2.5 text-sky-400">
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </svg>
-      <span className="text-lg font-bold tracking-tight">LockKeep</span>
+    <Link to="/" className="group flex items-center gap-3">
+      <BrandLock className="h-8 w-8 text-brass-500 transition-colors group-hover:text-brass-400" />
+      <span className="flex flex-col leading-none">
+        <span className="font-display text-xl font-semibold tracking-tight text-ivory">
+          LockKeep
+        </span>
+        <span className="mt-0.5 text-[0.5625rem] font-semibold uppercase tracking-[0.32em] text-brass-500/80">
+          The Vault
+        </span>
+      </span>
     </Link>
   );
 }
 
 function Nav() {
   const { user } = useAuth();
-  
+  const { isLocked } = useVault();
+
   return (
-    <nav className="flex gap-1">
-      <NavLink to="/dashboard">Dashboard</NavLink>
+    <nav className="hidden items-center gap-1 md:flex">
+      <NavLink to="/dashboard">
+        Vault
+        <span
+          className={`ml-2 inline-block h-1.5 w-1.5 rounded-full ${
+            isLocked ? "bg-vermillion-400" : "bg-patina-400"
+          }`}
+        />
+      </NavLink>
+      <NavLink to="/workspaces" matchPrefix>
+        Workspaces
+      </NavLink>
       <NavLink to="/settings">Settings</NavLink>
-      {user?.userType === "admin" && (
+      {user?.systemRole === "system:admin" && (
         <NavLink to="/admin/policy">Policy</NavLink>
       )}
     </nav>
@@ -135,22 +153,16 @@ function Actions({
   return (
     <div className="flex items-center gap-3">
       {isAuthenticated && userEmail && (
-        <span className="hidden max-w-[160px] truncate text-sm text-slate-500 sm:block">
+        <span className="hidden max-w-[180px] truncate font-mono text-xs tracking-wide text-sand-500 lg:block">
           {userEmail}
         </span>
       )}
       {isAuthenticated ? (
-        <button
-          onClick={onLogout}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-400 hover:text-slate-200 cursor-pointer"
-        >
+        <button onClick={onLogout} className="lk-btn lk-btn--ghost">
           Sign Out
         </button>
       ) : !isAuthPage ? (
-        <Link
-          to="/login"
-          className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-300"
-        >
+        <Link to="/login" className="lk-btn lk-btn--primary">
           Sign In
         </Link>
       ) : null}
@@ -185,18 +197,17 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <Links />
       </head>
       <body>
-        <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6">
-          <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 p-8">
-            <h1 className="mb-2 text-3xl font-bold text-slate-100">{title}</h1>
-            <p className="mb-6 text-slate-400">{message}</p>
-            <Link
-              to="/"
-              className="inline-flex rounded-lg bg-sky-400 px-4 py-2 font-medium text-slate-950 hover:bg-sky-300"
-            >
-              Return Home
+        <div className="lk-ambient flex min-h-screen items-center justify-center px-6">
+          <div className="plate w-full max-w-lg p-8">
+            <h1 className="mb-2 font-display text-3xl font-semibold text-ivory">
+              {title}
+            </h1>
+            <p className="mb-6 text-sm text-sand-400">{message}</p>
+            <Link to="/" className="lk-btn lk-btn--primary">
+              Return to the Vault
             </Link>
             {stack && (
-              <pre className="mt-6 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs text-red-400">
+              <pre className="mt-6 overflow-x-auto rounded-lg border border-vermillion-500/30 bg-coal-950 p-4 text-xs text-vermillion-300">
                 <code>{stack}</code>
               </pre>
             )}

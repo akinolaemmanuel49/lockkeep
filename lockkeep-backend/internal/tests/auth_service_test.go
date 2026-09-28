@@ -33,7 +33,7 @@ func newTestAuthService() (*services.AuthService, *mocks.MockUserRepository, *mo
 
 func TestAuthService_Register(t *testing.T) {
 	t.Run("successful registration", func(t *testing.T) {
-		svc, userRepo, identityRepo, _, uow, _ := newTestAuthService()
+		svc, userRepo, identityRepo, membershipRepo, uow, jwtManager := newTestAuthService()
 
 		input := dto.RegisterRequestDTO{
 			Username: "newuser",
@@ -46,15 +46,22 @@ func TestAuthService_Register(t *testing.T) {
 		userRepo.On("FindByID", mock.Anything, mock.Anything).Return(&domain.User{ID: bson.NewObjectID(), Email: input.Email, Username: input.Username}, nil)
 		identityRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Identity")).Return(nil)
 		uow.On("Within", mock.Anything, mock.Anything).Return(nil)
+		membershipRepo.On("FindByUser", mock.Anything, mock.Anything).Return([]domain.Membership{}, nil)
+		jwtManager.On("GeneratePair", mock.Anything).Return(&dto.TokenPair{AccessToken: "access.token", RefreshToken: "refresh.token"}, nil)
 
-		user, err := svc.Register(context.Background(), input)
+		userResp, tokens, err := svc.Register(context.Background(), input)
 
 		assert.NoError(t, err)
-		assert.NotNil(t, user)
-		assert.Equal(t, input.Email, user.Email)
+		assert.NotNil(t, userResp)
+		assert.NotNil(t, tokens)
+		assert.Equal(t, input.Email, userResp.Email)
+		assert.Equal(t, "local", userResp.AuthMethod)
+		assert.False(t, userResp.HasMasterPassword)
 		userRepo.AssertExpectations(t)
 		identityRepo.AssertExpectations(t)
 		uow.AssertExpectations(t)
+		membershipRepo.AssertExpectations(t)
+		jwtManager.AssertExpectations(t)
 	})
 
 	t.Run("email already taken", func(t *testing.T) {
@@ -65,7 +72,7 @@ func TestAuthService_Register(t *testing.T) {
 		userRepo.On("EmailExists", mock.Anything, input.Email).Return(true, nil)
 		uow.On("Within", mock.Anything, mock.Anything).Return(nil)
 
-		_, err := svc.Register(context.Background(), input)
+		_, _, err := svc.Register(context.Background(), input)
 
 		assert.ErrorIs(t, err, services.ErrEmailTaken)
 		userRepo.AssertExpectations(t)
@@ -104,6 +111,8 @@ func TestAuthService_Login(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, returnedUser)
 		assert.NotNil(t, tokens)
+		assert.Equal(t, email, returnedUser.Email)
+		assert.Equal(t, "local", returnedUser.AuthMethod)
 		assert.Equal(t, "access.token", tokens.AccessToken)
 		userRepo.AssertExpectations(t)
 		identityRepo.AssertExpectations(t)
@@ -307,14 +316,19 @@ func TestAuthService_GetKDFParams(t *testing.T) {
 		userRepo.AssertExpectations(t)
 	})
 
-	t.Run("vault not set up", func(t *testing.T) {
+	t.Run("vault not set up returns defaults", func(t *testing.T) {
 		svc, userRepo, _, _, _, _ := newTestAuthService()
 
 		user := &domain.User{ID: userID}
 		userRepo.On("FindByID", mock.Anything, userID).Return(user, nil).Once()
 
-		_, err := svc.GetKDFParams(context.Background(), userID)
-		assert.ErrorIs(t, err, services.ErrVaultNotFound)
+		kdf, err := svc.GetKDFParams(context.Background(), userID)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, kdf)
+		assert.Equal(t, "argon2id", kdf.Algorithm)
+		assert.Equal(t, "", kdf.Salt)
+		userRepo.AssertExpectations(t)
 	})
 
 	t.Run("user not found", func(t *testing.T) {
