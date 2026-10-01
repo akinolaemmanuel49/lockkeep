@@ -13,6 +13,7 @@ import type { Workspace, WorkspaceTeam } from "~/types";
 import { useToast } from "~/providers/toast";
 import { useAuth } from "~/providers/auth";
 import Nameplate from "~/components/Nameplate";
+import WorkspaceApplications from "~/components/WorkspaceApplications";
 
 export const clientLoader = () => {
   return requireAuth();
@@ -395,12 +396,20 @@ export default function WorkspaceDetail() {
             </div>
 
             <p className="mt-4 text-sm leading-relaxed text-sand-500">
-              Invitations, role assignment, and shared-secret access land with
-              the backend RBAC phases. The design system here is ready for them.
+              Access to applications, environments, and secrets is enforced
+              server-side by the workspace RBAC layer. Managing invitations and
+              role assignments ships with a later phase.
             </p>
           </section>
         </div>
       </div>
+
+      {/* Applications */}
+      {slug && (
+        <div className="mt-5">
+          <WorkspaceApplications slug={slug} />
+        </div>
+      )}
 
       {/* Edit modal */}
       {isEditOpen && (

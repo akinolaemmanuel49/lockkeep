@@ -10,6 +10,10 @@ export default [
     route("callback", "routes/callback.tsx"),
     route("workspaces", "routes/workspaces.tsx"),
     route("workspaces/:slug", "routes/workspace.$slug.tsx"),
+    route(
+      "workspaces/:slug/applications/:appSlug",
+      "routes/workspace.$slug.applications.$appSlug.tsx",
+    ),
     layout("routes/_admin.tsx", [
         route("admin/policy", "routes/_admin-policy.tsx"),
     ]),

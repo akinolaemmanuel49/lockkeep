@@ -84,10 +84,7 @@ function Layout() {
           <footer className="border-t border-brass-500/10 py-5">
             <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 text-[0.6875rem] uppercase tracking-[0.3em] text-sand-600">
               <span>LockKeep Vault</span>
-              <span className="font-mono tracking-[0.22em]">
-                {/* design-time distinction: v2 workspace-aware UI */}
-                v2 :: workspace-aware
-              </span>
+              <span className="font-mono tracking-[0.22em]">v2</span>
             </div>
           </footer>
 

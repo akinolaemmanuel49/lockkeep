@@ -158,3 +158,133 @@ export interface WorkspaceTeam {
     createdAt: string;
     updatedAt: string;
 }
+
+// ─── Workspace shared secrets DTOs ──────────────────────────────
+
+export type SharedSecretKind = "env" | "note" | "file" | "json";
+
+export interface WorkspaceApplication {
+    id: string;
+    organizationId: string;
+    name: string;
+    slug: string;
+    description?: string;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface WorkspaceEnvironment {
+    id: string;
+    organizationId: string;
+    applicationId: string;
+    name: string;
+    slug: string;
+    isProtected: boolean;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * A workspace secret as seen by the authenticated human API path: the server
+ * unwraps the DEK and returns the plaintext value. `value` is omitted on list
+ * responses only if the server suppresses it (currently always present).
+ */
+export interface WorkspaceEnvSecret {
+    key: string;
+    kind: SharedSecretKind;
+    version: number;
+    value?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateApplicationInput {
+    name: string;
+    slug: string;
+    description?: string;
+}
+
+export interface CreateEnvironmentInput {
+    name: string;
+    slug: string;
+    isProtected: boolean;
+}
+
+export interface CreateSecretInput {
+    key: string;
+    kind: SharedSecretKind;
+    value: string;
+}
+
+export interface UpdateSecretInput {
+    kind: SharedSecretKind;
+    value: string;
+}
+
+// ─── Machine access (service accounts + API keys) DTOs ──────────
+
+export type ApiKeyScope = "secrets:read" | "secrets:write";
+
+export interface ServiceAccount {
+    id: string;
+    organizationId: string;
+    name: string;
+    description?: string;
+    createdBy: string;
+    disabledAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ApiKeyRecord {
+    id: string;
+    serviceAccountId: string;
+    environmentId: string;
+    keyPrefix: string;
+    scopes: ApiKeyScope[];
+    createdBy: string;
+    expiresAt?: string;
+    lastUsedAt?: string;
+    revokedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** The one-time mint response: raw key is only ever shown/returned here. */
+export interface MintedApiKey {
+    apiKey: string;
+    key: ApiKeyRecord;
+}
+
+export interface MachineEnvelope {
+    environmentId: string;
+    kdf: {
+        algorithm: string;
+        salt: string;
+        info: string;
+        length: number;
+    };
+    wrappedDek: {
+        keyId: string;
+        algorithm: string;
+        ciphertext: string;
+        nonce: string;
+        aad: string;
+    };
+    secrets: Array<{
+        key: string;
+        kind: SharedSecretKind;
+        version: number;
+        ciphertext: string;
+        nonce: string;
+    }>;
+}
+
+export interface DecryptedMachineSecret {
+    key: string;
+    kind: SharedSecretKind;
+    version: number;
+    value: string;
+}
