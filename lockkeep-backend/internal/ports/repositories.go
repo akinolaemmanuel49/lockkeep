@@ -103,3 +103,61 @@ type CryptoPolicyRepository interface {
 	GetCurrent(ctx context.Context) (*domain.CryptoPolicy, error)
 	SetCurrent(ctx context.Context, policy *domain.CryptoPolicy) error
 }
+
+type ApplicationRepository interface {
+	IndexManager
+	Create(ctx context.Context, app *domain.Application) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.Application, error)
+	FindBySlug(ctx context.Context, orgID bson.ObjectID, slug string) (*domain.Application, error)
+	FindByOrganization(ctx context.Context, orgID bson.ObjectID) ([]domain.Application, error)
+	Update(ctx context.Context, id bson.ObjectID, update domain.Application) error
+	Delete(ctx context.Context, id bson.ObjectID) error
+}
+
+type EnvironmentRepository interface {
+	IndexManager
+	Create(ctx context.Context, env *domain.Environment) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.Environment, error)
+	FindBySlug(ctx context.Context, orgID, appID bson.ObjectID, slug string) (*domain.Environment, error)
+	FindByApplication(ctx context.Context, appID bson.ObjectID) ([]domain.Environment, error)
+	Update(ctx context.Context, id bson.ObjectID, update domain.Environment) error
+	Delete(ctx context.Context, id bson.ObjectID) error
+}
+
+type EnvSecretRepository interface {
+	IndexManager
+	Create(ctx context.Context, secret *domain.EnvSecret) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.EnvSecret, error)
+	FindByKey(ctx context.Context, environmentID bson.ObjectID, key string) (*domain.EnvSecret, error)
+	FindByEnvironment(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error)
+	Update(ctx context.Context, id bson.ObjectID, update domain.EnvSecret) error
+	Delete(ctx context.Context, id bson.ObjectID) error
+}
+
+type ServiceAccountRepository interface {
+	IndexManager
+	Create(ctx context.Context, account *domain.ServiceAccount) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.ServiceAccount, error)
+	FindByOrganization(ctx context.Context, orgID bson.ObjectID) ([]domain.ServiceAccount, error)
+	Update(ctx context.Context, id bson.ObjectID, update domain.ServiceAccount) error
+	Delete(ctx context.Context, id bson.ObjectID) error
+}
+
+type ApiKeyRepository interface {
+	IndexManager
+	Create(ctx context.Context, key *domain.ApiKey) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.ApiKey, error)
+	FindByPrefix(ctx context.Context, prefix string) (*domain.ApiKey, error)
+	FindByServiceAccount(ctx context.Context, serviceAccountID bson.ObjectID) ([]domain.ApiKey, error)
+	Update(ctx context.Context, id bson.ObjectID, update domain.ApiKey) error
+	Delete(ctx context.Context, id bson.ObjectID) error
+}
+
+type KeyManagementRepository interface {
+	IndexManager
+	Create(ctx context.Context, key *domain.EncryptedKey) error
+	FindByID(ctx context.Context, id bson.ObjectID) (*domain.EncryptedKey, error)
+	FindByScope(ctx context.Context, scope string, scopeID bson.ObjectID) (*domain.EncryptedKey, error)
+	Update(ctx context.Context, id bson.ObjectID, update domain.EncryptedKey) error
+	Delete(ctx context.Context, id bson.ObjectID) error
+}

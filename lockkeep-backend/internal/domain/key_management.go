@@ -25,10 +25,11 @@ type MasterKeyRef struct {
 // EncryptedKey — actual encryption key, wrapped by master key
 type EncryptedKey struct {
 	ID          bson.ObjectID `bson:"_id,omitempty" json:"id"`
-	Scope       string        `bson:"scope" json:"scope"` // "org" or "team"
+	Scope       string        `bson:"scope" json:"scope"` // "org", "team" or "environment"
 	ScopeID     bson.ObjectID `bson:"scope_id" json:"scopeId"`
 	MasterKeyID string        `bson:"master_key_id" json:"masterKeyId"`
 	Ciphertext  []byte        `bson:"ciphertext" json:"-"`
+	Nonce       []byte        `bson:"nonce" json:"-"`
 	Algorithm   string        `bson:"algorithm" json:"algorithm"`
 	CreatedAt   time.Time     `bson:"created_at" json:"createdAt"`
 	RotatedAt   *time.Time    `bson:"rotated_at,omitempty" json:"rotatedAt,omitempty"`

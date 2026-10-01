@@ -18,6 +18,8 @@ type Config struct {
 	Auth0ClientID     string
 	Auth0ClientSecret string
 	Auth0RedirectURI  string
+	KeyWrappingKey    string
+	APIKeyHashSecret  string
 }
 
 func Load() *Config {
@@ -33,6 +35,8 @@ func Load() *Config {
 		Auth0ClientID:     getEnv("AUTH0_CLIENT_ID", ""),
 		Auth0ClientSecret: getEnv("AUTH0_CLIENT_SECRET", ""),
 		Auth0RedirectURI:  getEnv("AUTH0_REDIRECT_URI", "http://localhost:5173/callback"),
+		KeyWrappingKey:    getEnv("LOCKKEEP_KEK", ""),
+		APIKeyHashSecret:  getEnv("LOCKKEEP_API_KEY_HASH_SECRET", ""),
 	}
 }
 

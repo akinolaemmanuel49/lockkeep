@@ -48,7 +48,13 @@ func RequireOrgAccess(membershipRepo ports.MembershipRepository, orgRepo ports.O
 	}
 }
 
-// RequirePermission checks if the user has a specific permission
+// RequirePermission checks if the user has a specific permission.
+//
+// It prefers the authoritative DB membership loaded by RequireOrgAccess (see
+// CtxKeyMembership) so permissions reflect the current organization state
+// rather than the JWT snapshot taken at login — a freshly created workspace is
+// usable immediately without re-issuing the access token. It falls back to the
+// org claims embedded in the token only when no membership is in context.
 func RequirePermission(perm domain.Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims := c.MustGet(CtxKeyClaims).(*jwt.Claims)
@@ -57,6 +63,29 @@ func RequirePermission(perm domain.Permission) gin.HandlerFunc {
 		if claims.SystemRole == string(domain.RoleSystemAdmin) {
 			c.Next()
 			return
+		}
+
+		if membership, ok := c.Get(CtxKeyMembership); ok {
+			m, ok := membership.(*domain.Membership)
+			if ok && m != nil {
+				if utils.HasPermission(m.RoleID, perm) {
+					c.Next()
+					return
+				}
+
+				teamID := c.GetString(CtxKeyTeamID)
+				for _, tr := range m.TeamRoles {
+					if teamID != "" && tr.TeamID.Hex() == teamID {
+						if utils.HasPermission(tr.RoleID, perm) {
+							c.Next()
+							return
+						}
+					}
+				}
+
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
+				return
+			}
 		}
 
 		orgID := c.GetString(CtxKeyOrgID)

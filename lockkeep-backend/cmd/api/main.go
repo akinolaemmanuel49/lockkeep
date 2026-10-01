@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/crypto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/handlers"
@@ -46,8 +47,16 @@ func main() {
 	vaultRepo := repositories.NewVaultRepository(rawDB)
 	vaultItemRepo := repositories.NewVaultItemRepository(rawDB)
 	// sharedSecretRepo := repository.NewSharedSecretRepository(rawDB)
-	// auditRepo := repository.NewAuditRepository(rawDB)
+	auditRepo := repositories.NewAuditEventRepository(rawDB)
 	cryptoPolicyRepo := repositories.NewCryptoPolicyRepository(rawDB)
+
+	// Shared secrets (workspace) repositories
+	appRepo := repositories.NewApplicationRepository(rawDB)
+	envRepo := repositories.NewEnvironmentRepository(rawDB)
+	envSecretRepo := repositories.NewEnvSecretRepository(rawDB)
+	serviceAccountRepo := repositories.NewServiceAccountRepository(rawDB)
+	apiKeyRepo := repositories.NewApiKeyRepository(rawDB)
+	keyMgmtRepo := repositories.NewKeyManagementRepository(rawDB)
 
 	// Ensure indexes
 	indexRepos := []interface{ EnsureIndexes(context.Context) error }{
@@ -57,6 +66,13 @@ func main() {
 		membershipRepo,
 		vaultRepo,
 		vaultItemRepo,
+		auditRepo,
+		appRepo,
+		envRepo,
+		envSecretRepo,
+		serviceAccountRepo,
+		apiKeyRepo,
+		keyMgmtRepo,
 	}
 	for _, repo := range indexRepos {
 		if err := repo.EnsureIndexes(ctx); err != nil {
@@ -78,6 +94,18 @@ func main() {
 	// auditService := service.NewAuditService(auditRepo)
 	cryptoPolicyService := services.NewCryptoPolicyService(cryptoPolicyRepo)
 
+	// Shared secrets (workspace) services
+	keyProvider, err := crypto.NewLocalKeyProvider([]byte(cfg.KeyWrappingKey))
+	if err != nil {
+		log.Fatalf("initialise key provider: %v", err)
+	}
+	if cfg.KeyWrappingKey == "" {
+		log.Println("WARNING: LOCKKEEP_KEK is not set; using an ephemeral key-wrapping key (wrapped keys become unreadable on restart)")
+	}
+	environmentService := services.NewEnvironmentService(appRepo, envRepo, envSecretRepo, keyMgmtRepo, membershipRepo, keyProvider)
+	envSecretService := services.NewEnvSecretService(envSecretRepo, envRepo, keyMgmtRepo, auditRepo, membershipRepo, keyProvider)
+	serviceAccountService := services.NewServiceAccountService(serviceAccountRepo, apiKeyRepo, envRepo, membershipRepo, cfg.APIKeyHashSecret)
+
 	// Seed the default crypto policy so clients always have parameters to
 	// derive keys against (no-op when a policy already exists).
 	if err := seedDefaultCryptoPolicy(ctx, cryptoPolicyService); err != nil {
@@ -91,10 +119,16 @@ func main() {
 	teamHandler := handlers.NewTeamHandler(teamService)
 	vaultHandler := handlers.NewVaultHandler(vaultService, vaultItemService)
 	cryptoPolicyHandler := handlers.NewCryptoPolicyHandler(cryptoPolicyService)
+	applicationHandler := handlers.NewApplicationHandler(environmentService)
+	environmentHandler := handlers.NewEnvironmentHandler(environmentService)
+	envSecretHandler := handlers.NewEnvSecretHandler(environmentService, envSecretService)
+	serviceAccountHandler := handlers.NewServiceAccountHandler(environmentService, serviceAccountService)
+	machineHandler := handlers.NewMachineHandler(envSecretService)
 
 	// Middleware
 	authMiddleware := middleware.Auth(jwtManager)
 	requireOrgAccess := middleware.RequireOrgAccess(membershipRepo, orgRepo)
+	machineAuth := middleware.MachineAuth(serviceAccountService)
 
 	// Router
 	r := gin.Default()
@@ -159,7 +193,54 @@ func main() {
 				team.GET("/:teamSlug", teamHandler.Get)
 				team.DELETE("/:teamID", middleware.RequirePermission(domain.PermTeamManage), teamHandler.Delete)
 			}
+
+			// Shared secrets: applications → environments → secrets
+			apps := org.Group("/applications")
+			{
+				apps.GET("", applicationHandler.List)
+				apps.POST("", middleware.RequirePermission(domain.PermSecretWrite), applicationHandler.Create)
+				apps.GET("/:appSlug", applicationHandler.Get)
+				apps.PATCH("/:appSlug", middleware.RequirePermission(domain.PermSecretWrite), applicationHandler.Update)
+				apps.DELETE("/:appSlug", middleware.RequirePermission(domain.PermSecretWrite), applicationHandler.Delete)
+
+				envs := apps.Group("/:appSlug/environments")
+				{
+					envs.GET("", environmentHandler.List)
+					envs.POST("", middleware.RequirePermission(domain.PermSecretWrite), environmentHandler.Create)
+					envs.GET("/:envSlug", environmentHandler.Get)
+					envs.PATCH("/:envSlug", middleware.RequirePermission(domain.PermSecretWrite), environmentHandler.Update)
+					envs.DELETE("/:envSlug", middleware.RequirePermission(domain.PermSecretWrite), environmentHandler.Delete)
+
+					secrets := envs.Group("/:envSlug/secrets")
+					{
+						secrets.GET("", envSecretHandler.List)
+						secrets.POST("", middleware.RequirePermission(domain.PermSecretWrite), envSecretHandler.Upsert)
+						secrets.GET("/:key", envSecretHandler.Get)
+						secrets.PUT("/:key", middleware.RequirePermission(domain.PermSecretWrite), envSecretHandler.Upsert)
+						secrets.DELETE("/:key", middleware.RequirePermission(domain.PermSecretWrite), envSecretHandler.Delete)
+					}
+				}
+			}
+
+			// Service accounts + environment-scoped API keys
+			accounts := org.Group("/service-accounts", middleware.RequirePermission(domain.PermSecretWrite))
+			{
+				accounts.GET("", serviceAccountHandler.List)
+				accounts.POST("", serviceAccountHandler.Create)
+				accounts.DELETE("/:accountID", serviceAccountHandler.Delete)
+				accounts.POST("/:accountID/api-keys", serviceAccountHandler.MintApiKey)
+				accounts.GET("/:accountID/api-keys", serviceAccountHandler.ListApiKeys)
+				accounts.DELETE("/:accountID/api-keys/:keyID", serviceAccountHandler.RevokeApiKey)
+			}
 		}
+	}
+
+	// Machine routes: authenticated by an environment-scoped API key only
+	// (no session JWT). The key carries the environment and scope.
+	machine := v2.Group("/machine")
+	machine.Use(machineAuth)
+	{
+		machine.GET("/secrets", machineHandler.Export)
 	}
 
 	// Crypto policy routes (system-wide KDF parameters). Writes require the

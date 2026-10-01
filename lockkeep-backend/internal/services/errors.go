@@ -44,3 +44,25 @@ var (
 	ErrEntityHasInvalidRoles = errors.New("invalid role(s)")
 	ErrInvalidProfileUpdate  = errors.New("username or avatar URL must be provided")
 )
+
+// Service Level Environment / Secret Errors
+var (
+	ErrApplicationNotFound     = errors.New("application not found")
+	ErrApplicationSlugTaken    = errors.New("application slug already taken in this organization")
+	ErrEnvironmentNotFound     = errors.New("environment not found")
+	ErrEnvironmentSlugTaken    = errors.New("environment slug already taken in this application")
+	ErrEnvironmentKeyNotFound  = errors.New("environment encryption key not provisioned")
+	ErrSecretNotFound          = errors.New("secret not found")
+	ErrInvalidSecretKind       = errors.New("invalid secret kind")
+)
+
+// Service Level Service Account / API Key Errors
+var (
+	ErrServiceAccountNotFound = errors.New("service account not found")
+	ErrApiKeyNotFound         = errors.New("api key not found")
+	ErrApiKeyRevoked          = errors.New("api key revoked")
+	ErrApiKeyExpired          = errors.New("api key expired")
+	ErrApiKeyDisabled         = errors.New("service account disabled")
+	ErrApiKeyScopesInvalid    = errors.New("api key must include at least one known scope")
+	ErrApiKeyPermission       = errors.New("api key lacks the required scope")
+)

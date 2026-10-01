@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
@@ -58,4 +59,35 @@ type VaultItemService interface {
 type CryptoPolicyService interface {
 	GetCurrentPolicy(ctx context.Context) (*domain.CryptoPolicy, error)
 	SetCurrentPolicy(ctx context.Context, policy *dto.SetCurrentPolicy) error
+}
+
+type EnvironmentService interface {
+	CreateApplication(ctx context.Context, userID, orgID bson.ObjectID, name, slug string, description *string) (*domain.Application, error)
+	GetApplicationBySlug(ctx context.Context, orgID bson.ObjectID, slug string) (*domain.Application, error)
+	ListApplications(ctx context.Context, orgID bson.ObjectID) ([]domain.Application, error)
+	UpdateApplication(ctx context.Context, userID, orgID, appID bson.ObjectID, update dto.UpdateApplicationDTO) (*domain.Application, error)
+	DeleteApplication(ctx context.Context, userID, orgID, appID bson.ObjectID) error
+	CreateEnvironment(ctx context.Context, userID, orgID, appID bson.ObjectID, name, slug string, isProtected bool) (*domain.Environment, error)
+	GetEnvironmentBySlug(ctx context.Context, orgID, appID bson.ObjectID, slug string) (*domain.Environment, error)
+	ListEnvironments(ctx context.Context, appID bson.ObjectID) ([]domain.Environment, error)
+	UpdateEnvironment(ctx context.Context, userID, orgID, envID bson.ObjectID, update dto.UpdateEnvironmentDTO) (*domain.Environment, error)
+	DeleteEnvironment(ctx context.Context, userID, orgID, envID bson.ObjectID) error
+}
+
+type EnvSecretService interface {
+	UpsertSecret(ctx context.Context, actor bson.ObjectID, orgID, environmentID bson.ObjectID, secret dto.SecretInput) (*dto.EnvSecretDTO, error)
+	ListSecrets(ctx context.Context, actor bson.ObjectID, environmentID bson.ObjectID) ([]dto.EnvSecretDTO, error)
+	GetSecret(ctx context.Context, actor bson.ObjectID, environmentID bson.ObjectID, key string) (*dto.EnvSecretDTO, error)
+	DeleteSecret(ctx context.Context, actor bson.ObjectID, orgID, environmentID bson.ObjectID, key string) error
+	ExportEnvelope(ctx context.Context, actorID bson.ObjectID, environmentID bson.ObjectID, bearerSecret []byte) (*dto.ExportEnvelope, error)
+}
+
+type ServiceAccountService interface {
+	CreateServiceAccount(ctx context.Context, userID, orgID bson.ObjectID, name string, description *string) (*domain.ServiceAccount, error)
+	ListServiceAccounts(ctx context.Context, orgID bson.ObjectID) ([]domain.ServiceAccount, error)
+	DeleteServiceAccount(ctx context.Context, userID, orgID, serviceAccountID bson.ObjectID) error
+	MintApiKey(ctx context.Context, userID, orgID, serviceAccountID, environmentID bson.ObjectID, scopes []domain.ApiKeyScope, expiresAt *time.Time) (*domain.ApiKey, string, error)
+	ListApiKeys(ctx context.Context, orgID, serviceAccountID bson.ObjectID) ([]domain.ApiKey, error)
+	RevokeApiKey(ctx context.Context, userID, orgID, keyID bson.ObjectID) error
+	VerifyApiKey(ctx context.Context, rawKey string) (*domain.ApiKey, *domain.ServiceAccount, error)
 }
