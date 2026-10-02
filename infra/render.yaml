@@ -1,6 +1,5 @@
 previews:
-    name: api
-    branch: ui/v2
+  generation: automatic # Enable preview environments
 
 services:
   - type: web
