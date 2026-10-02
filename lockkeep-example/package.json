@@ -1,0 +1,22 @@
+{
+  "name": "lockkeep-example",
+  "private": true,
+  "description": "Minimal app that reads a LockKeep environment in one API call and prints the secrets.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node dist/index.js",
+    "demo": "node dist/index.js run -- node dist/app.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@lockkeep/sdk": "file:../lockkeep-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3"
+  }
+}
