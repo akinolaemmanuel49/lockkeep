@@ -6,7 +6,7 @@ services:
     runtime: docker
     rootDir: lockkeep-backend
     dockerfilePath: Dockerfile
-    healthCheckPath: /api/v2/health
+    # healthCheckPath: /api/v2/health
     autoDeploy: false
     envVars:
       - key: PORT
