@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
@@ -12,6 +13,41 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
+
+// refreshCookieMaxAge is how long a refresh token cookie stays valid.
+const refreshCookieMaxAge = 7 * 24 * 60 * 60
+
+// setRefreshCookie writes the httpOnly refresh-token cookie. SameSite=None +
+// Secure are required for the cookie to survive cross-site requests (the web
+// console on one origin calling the API on another); browsers reject
+// SameSite=None without Secure. The host-only cookie (empty Domain) is fine
+// because the API sets and reads its own cookie.
+func setRefreshCookie(c *gin.Context, token string, maxAge int) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    token,
+		Path:     "/",
+		MaxAge:   maxAge,
+		Expires:  time.Now().Add(time.Duration(maxAge) * time.Second),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+	})
+}
+
+// clearRefreshCookie expires the refresh-token cookie (logout / failed refresh).
+func clearRefreshCookie(c *gin.Context) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+	})
+}
 
 type AuthHandler struct {
 	authService ports.AuthService
@@ -44,7 +80,7 @@ func (h *AuthHandler) OAuth(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+	setRefreshCookie(c, tokens.RefreshToken, refreshCookieMaxAge)
 
 	status := http.StatusOK
 	message := "user logged in successfully"
@@ -78,7 +114,7 @@ func (h *AuthHandler) Register(ctx *gin.Context) {
 		return
 	}
 
-	ctx.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+	setRefreshCookie(ctx, tokens.RefreshToken, refreshCookieMaxAge)
 
 	ctx.JSON(http.StatusCreated, gin.H{
 		"access_token":  tokens.AccessToken,
@@ -105,7 +141,7 @@ func (h *AuthHandler) Login(ctx *gin.Context) {
 		return
 	}
 
-	ctx.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+	setRefreshCookie(ctx, tokens.RefreshToken, refreshCookieMaxAge)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  tokens.AccessToken,
@@ -128,7 +164,7 @@ func (h *AuthHandler) Refresh(ctx *gin.Context) {
 		return
 	}
 
-	ctx.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+	setRefreshCookie(ctx, tokens.RefreshToken, refreshCookieMaxAge)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token": tokens.AccessToken,
@@ -136,7 +172,7 @@ func (h *AuthHandler) Refresh(ctx *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(ctx *gin.Context) {
-	ctx.SetCookie("refresh_token", "", -1, "/", "", false, true)
+	clearRefreshCookie(ctx)
 	ctx.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 
@@ -220,7 +256,7 @@ func (h *AuthHandler) UpdateEmail(ctx *gin.Context) {
 		return
 	}
 
-	ctx.SetCookie("refresh_token", tokens.RefreshToken, 7*24*60*60, "/", "", false, true)
+	setRefreshCookie(ctx, tokens.RefreshToken, refreshCookieMaxAge)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"access_token":  tokens.AccessToken,
