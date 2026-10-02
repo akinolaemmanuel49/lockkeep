@@ -6,6 +6,7 @@ services:
     name: lockkeep-api
     plan: free
     branch: ui/v2
+    runtime: docker
     rootDir: lockkeep-backend
     dockerfilePath: Dockerfile
     healthCheckPath: /api/v2/health
