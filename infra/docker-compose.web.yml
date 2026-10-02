@@ -6,8 +6,8 @@ services:
       args:
         - VITE_AUTH0_DOMAIN=${VITE_AUTH0_DOMAIN:-}
         - VITE_AUTH0_CLIENT_ID=${VITE_AUTH0_CLIENT_ID:-}
-        - VITE_AUTH0_REDIRECT_URI=http://lockkeep.localhost/callback
-        - VITE_LOCKKEEP_API_URI=http://api.lockkeep.localhost/api/v2
+        - VITE_AUTH0_REDIRECT_URI=${VITE_AUTH0_REDIRECT_URI}
+        - VITE_LOCKKEEP_API_URI=${VITE_LOCKKEEP_API_URI}
     labels:
       - "traefik.http.routers.lockkeep-web.rule=Host(`lockkeep.localhost`)"
       - "traefik.http.services.lockkeep-web.loadbalancer.server.port=3000"
