@@ -18,7 +18,7 @@ type Database struct {
 
 // Connect establishes a connection with retry logic
 func Connect(ctx context.Context, uri string, dbName string) (*Database, error) {
-	clientOpts := options.Client().ApplyURI(uri).SetServerSelectionTimeout(5 * time.Second)
+	clientOpts := options.Client().ApplyURI(uri).SetServerSelectionTimeout(10 * time.Second).SetConnectTimeout(10 * time.Second)
 
 	var client *mongo.Client
 	var err error
@@ -30,6 +30,10 @@ func Connect(ctx context.Context, uri string, dbName string) (*Database, error) 
 			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			err = client.Ping(pingCtx, readpref.Primary())
 			cancel()
+
+			if err != nil {
+				fmt.Printf("ERROR, %s", err)
+			}
 
 			if err == nil {
 				break
