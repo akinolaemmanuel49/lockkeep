@@ -1,0 +1,102 @@
+import { config } from "~/config";
+import type { KDFParams, VaultItem, CreateVaultItemRequest, UpdateVaultItemRequest } from "~/types/index";
+import { authFetch } from "./core";
+
+export async function verifyVaultPassword(
+    verificationHash: string,
+): Promise<{ success: boolean; credentials: VaultItem[] }> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verification_hash: verificationHash }),
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to verify vault password");
+    }
+
+    return res.json();
+}
+
+export async function createVaultItem(
+    item: CreateVaultItemRequest,
+): Promise<VaultItem> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to add item to vault");
+    }
+
+    const data = await res.json();
+    return data.item;
+}
+
+export async function fetchVaultItems(): Promise<VaultItem[]> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items`, {
+        method: "GET",
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to fetch vault items");
+    }
+
+    const data = await res.json();
+    return data.items;
+}
+
+export async function updateVaultItem(
+    itemId: string,
+    updates: UpdateVaultItemRequest,
+    updatePolicy?: boolean,
+): Promise<VaultItem> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items/${itemId}?updatePolicy=${updatePolicy === true}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update vault item");
+    }
+
+    const data = await res.json();
+    return data.item;
+}
+
+export async function deleteVaultItem(itemId: string): Promise<void> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/items/${itemId}`, {
+        method: "DELETE",
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to delete vault item");
+    }
+}
+
+export async function updateVaultPassword(
+    newVerificationHash: string,
+    newKdfParams: KDFParams,
+): Promise<void> {
+    const res = await authFetch(`${config.LOCKKEEP_API_URI}/me/vault/setup`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            verification_hash: newVerificationHash,
+            kdf_params: newKdfParams,
+        }),
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update vault password");
+    }
+}

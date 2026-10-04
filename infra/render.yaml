@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: lockkeep-api
+    plan: free
+    branch: ui/v2
+    runtime: docker
+    rootDir: lockkeep-backend
+    dockerfilePath: Dockerfile
+    # healthCheckPath: /api/v2/health
+    autoDeploy: false
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: LOCKKEEP_KEK
+        generateValue: true
+      - key: LOCKKEEP_API_KEY_HASH_SECRET
+        generateValue: true
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: AUTH0_REDIRECT_URI
+        sync: false

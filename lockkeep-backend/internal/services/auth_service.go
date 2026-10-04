@@ -1,0 +1,526 @@
+package services
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/config"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
+	"github.com/akinolaemmanuel49/lockkeep-backend/pkg/jwt"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type AuthService struct {
+	cfg            *config.Config
+	userRepo       ports.UserRepository
+	identityRepo   ports.IdentityRepository
+	membershipRepo ports.MembershipRepository
+	unitOfWork     mongo.UnitOfWork
+	jwtManager     ports.JWTManager
+}
+
+func NewAuthService(
+	cfg *config.Config,
+	userRepo ports.UserRepository,
+	identityRepo ports.IdentityRepository,
+	membershipRepo ports.MembershipRepository,
+	unitOfWork mongo.UnitOfWork,
+	jwtManager ports.JWTManager,
+) *AuthService {
+	return &AuthService{
+		cfg:            cfg,
+		userRepo:       userRepo,
+		identityRepo:   identityRepo,
+		membershipRepo: membershipRepo,
+		unitOfWork:     unitOfWork,
+		jwtManager:     jwtManager,
+	}
+}
+
+// Register creates a new user with local authentication and immediately issues
+// a token pair (register == login).
+func (s *AuthService) Register(ctx context.Context, input dto.RegisterRequestDTO) (*dto.UserResponse, *dto.TokenPair, error) {
+	var createdUser *domain.User
+
+	err := s.unitOfWork.Within(ctx, func(txCtx context.Context) error {
+		exists, err := s.userRepo.EmailExists(txCtx, input.Email)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return ErrEmailTaken
+		}
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("hash password: %w", err)
+		}
+
+		user := &domain.User{
+			ID:       bson.NewObjectID(),
+			Username: input.Username,
+			Email:    input.Email,
+		}
+
+		if err := s.userRepo.Create(txCtx, user); err != nil {
+			return err
+		}
+		// Feels weird, might be better off manually passing timestamps
+		createdUser, err = s.userRepo.FindByID(txCtx, user.ID)
+		if err != nil {
+			return err
+		}
+
+		identity := &domain.Identity{
+			ID:           bson.NewObjectID(),
+			UserID:       user.ID,
+			AuthMethod:   domain.AuthMethodLocal,
+			PasswordHash: string(hash),
+		}
+
+		if err := s.identityRepo.Create(txCtx, identity); err != nil {
+			return fmt.Errorf("create identity: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	claims := s.buildClaims(ctx, createdUser)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return dto.SerializeUser(createdUser, domain.AuthMethodLocal, claims.SystemRole), tokens, nil
+}
+
+// Login validates credentials and returns user + token pair
+func (s *AuthService) Login(ctx context.Context, input dto.LoginRequestDTO) (*dto.UserResponse, *dto.TokenPair, error) {
+	user, err := s.userRepo.FindByEmail(ctx, input.Email)
+	if err != nil {
+		return nil, nil, err
+	}
+	if user == nil {
+		return nil, nil, ErrInvalidCredentials
+	}
+
+	identities, err := s.identityRepo.FindByUserID(ctx, user.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var localIdentity *domain.Identity
+	for i := range identities {
+		if identities[i].AuthMethod == domain.AuthMethodLocal {
+			localIdentity = &identities[i]
+			break
+		}
+	}
+
+	if localIdentity == nil {
+		return nil, nil, ErrInvalidCredentials
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(localIdentity.PasswordHash), []byte(input.Password)); err != nil {
+		return nil, nil, ErrInvalidCredentials
+	}
+
+	_ = s.identityRepo.RecordLogin(ctx, localIdentity.ID)
+
+	claims := s.buildClaims(ctx, user)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return dto.SerializeUser(user, domain.AuthMethodLocal, claims.SystemRole), tokens, nil
+}
+
+func (s *AuthService) Me(ctx context.Context, userID string) (*domain.User, error) {
+	userObjID, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.userRepo.FindByID(ctx, userObjID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	return user, nil
+}
+
+func (s *AuthService) getAuth0UserInfo(accessToken string) (*dto.Auth0UserInfo, error) {
+	req, err := http.NewRequest("GET", "https://"+s.cfg.Auth0Domain+"/userinfo", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, errors.New("auth0 userinfo failed: " + string(body))
+	}
+
+	var userInfo dto.Auth0UserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, err
+	}
+	return &userInfo, nil
+}
+
+func extractProvider(sub string) (domain.AuthMethod, error) {
+	if strings.HasPrefix(sub, "google-oauth2|") {
+		return "oauth_google", nil
+	}
+	if strings.HasPrefix(sub, "github|") {
+		return "oauth_github", nil
+	}
+	if strings.HasPrefix(sub, "auth0|") {
+		return "oauth_auth0", nil
+	}
+	return "", fmt.Errorf("invalid provider")
+}
+
+// OAuth handles OAuth registration/login
+func (s *AuthService) OAuth(ctx context.Context, accessToken string) (*dto.UserResponse, *dto.TokenPair, bool, error) {
+	userInfo, err := s.getAuth0UserInfo(accessToken)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	provider, err := extractProvider(userInfo.Sub)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	identity, err := s.identityRepo.FindByOAuth(ctx, domain.AuthMethod(provider), userInfo.Sub)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	input := dto.OauthAuthorizeDTO{
+		Method:     provider,
+		ProviderID: userInfo.Sub,
+		Email:      userInfo.Email,
+		Username:   userInfo.Nickname,
+	}
+
+	var user *domain.User
+	var isNewUser bool
+
+	if identity != nil {
+		user, err = s.userRepo.FindByID(ctx, identity.UserID)
+		if err != nil {
+			return nil, nil, false, err
+		}
+
+		if user == nil {
+			return nil, nil, false, ErrUserNotFound
+		}
+
+		_ = s.identityRepo.RecordLogin(ctx, identity.ID)
+
+		isNewUser = false
+	} else {
+		user, isNewUser, err = s.registerOAuthUser(ctx, input)
+		if err != nil {
+			return nil, nil, false, err
+		}
+	}
+
+	// New, existing, and newly-linked OAuth users all receive a token pair so
+	// the client can authenticate immediately (and proceed to vault setup).
+	claims := s.buildClaims(ctx, user)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, isNewUser, err
+	}
+
+	return dto.SerializeUser(user, provider, claims.SystemRole), tokens, isNewUser, nil
+}
+
+// registerOAuthUser creates a user + OAuth identity, or links a new OAuth
+// identity to an existing account (same email). Returns the user and whether a
+// brand-new account was created.
+func (s *AuthService) registerOAuthUser(ctx context.Context, input dto.OauthAuthorizeDTO) (*domain.User, bool, error) {
+	var resultUser *domain.User
+	var isNewUser bool
+
+	err := s.unitOfWork.Within(ctx, func(txCtx context.Context) error {
+		existing, err := s.userRepo.FindByEmail(txCtx, input.Email)
+		if err != nil {
+			return err
+		}
+
+		var userID bson.ObjectID
+		if existing != nil {
+			userID = existing.ID
+			resultUser = existing
+		} else {
+			user := &domain.User{
+				ID:       bson.NewObjectID(),
+				Username: input.Username,
+				Email:    input.Email,
+			}
+			if err := s.userRepo.Create(txCtx, user); err != nil {
+				return err
+			}
+			userID = user.ID
+			resultUser = user
+			isNewUser = true
+		}
+
+		identity := &domain.Identity{
+			ID:             bson.NewObjectID(),
+			UserID:         userID,
+			AuthMethod:     input.Method,
+			AuthProviderID: &input.ProviderID,
+		}
+
+		if err := s.identityRepo.Create(txCtx, identity); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	return resultUser, isNewUser, nil
+}
+
+func (s *AuthService) buildClaims(ctx context.Context, user *domain.User) jwt.Claims {
+	role := domain.RoleSystemUser
+
+	memberships, _ := s.membershipRepo.FindByUser(ctx, user.ID)
+
+	orgClaims := make([]jwt.OrgClaim, len(memberships))
+	for i, m := range memberships {
+		orgClaims[i] = jwt.OrgClaim{
+			OrgID:     m.OrganizationID.Hex(),
+			Role:      string(m.RoleID),
+			TeamRoles: extractTeamRoles(m.TeamRoles),
+		}
+	}
+
+	return jwt.Claims{
+		UserID:     user.ID.Hex(),
+		Email:      user.Email,
+		SystemRole: string(role),
+		Orgs:       orgClaims,
+	}
+}
+
+func extractTeamRoles(roles []domain.TeamRole) map[string]string {
+	result := make(map[string]string, len(roles))
+	for _, r := range roles {
+		result[r.TeamID.Hex()] = string(r.RoleID)
+	}
+	return result
+}
+
+// Refresh rotates tokens using refresh token
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*dto.TokenPair, error) {
+	userID, err := s.jwtManager.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	objUserID, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.userRepo.FindByID(ctx, objUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	claims := s.buildClaims(ctx, user)
+	return s.jwtManager.GeneratePair(claims)
+}
+
+// SetVerificationHash stores the client-derived vault verification hash and
+// KDF parameters on the user's vault metadata. Zero-knowledge: the server
+// never sees the master key, only the verification hash the client derives.
+func (s *AuthService) SetVerificationHash(ctx context.Context, userID bson.ObjectID, req dto.SetVerificationHashRequest) (*domain.User, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	version := uint32(1)
+	if user.Vault != nil && user.Vault.Version > 0 {
+		version = user.Vault.Version
+	}
+
+	user.Vault = &domain.VaultMetadata{
+		Version:          version,
+		VerificationHash: req.VerificationHash,
+		KDF: domain.KDFParams{
+			Algorithm:   req.KDFParams.Algorithm,
+			Salt:        req.KDFParams.Salt,
+			Memory:      req.KDFParams.Memory,
+			Iterations:  req.KDFParams.Iterations,
+			Parallelism: req.KDFParams.Parallelism,
+		},
+	}
+
+	if err := s.userRepo.UpdateVaultMetadata(ctx, userID, *user.Vault); err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// GetKDFParams returns the KDF parameters stored for the user's vault so the
+// client can re-derive the master key for a given password. For users without
+// a vault yet (vault setup), it returns the default server-side parameters; the
+// client supplies a fresh salt at setup time.
+func (s *AuthService) GetKDFParams(ctx context.Context, userID bson.ObjectID) (*domain.KDFParams, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	if user.Vault == nil || user.Vault.KDF.Salt == "" {
+		return defaultKDFParams(), nil
+	}
+
+	return &user.Vault.KDF, nil
+}
+
+func defaultKDFParams() *domain.KDFParams {
+	return &domain.KDFParams{
+		Algorithm:   "argon2id",
+		Memory:      65536,
+		Iterations:  3,
+		Parallelism: 4,
+	}
+}
+
+// UpdateEmail changes the account email and re-issues tokens, since email is a
+// JWT claim. Only required for users with a local identity; OAuth-only users
+// must manage their email at the provider.
+func (s *AuthService) UpdateEmail(ctx context.Context, userID bson.ObjectID, req dto.UpdateEmailRequest) (*dto.UserResponse, *dto.TokenPair, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if user == nil {
+		return nil, nil, ErrUserNotFound
+	}
+
+	identities, err := s.identityRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !hasLocalIdentity(identities) {
+		return nil, nil, ErrCannotEditOAuth
+	}
+
+	exists, err := s.userRepo.EmailExists(ctx, req.Email)
+	if err != nil {
+		return nil, nil, err
+	}
+	if exists && req.Email != user.Email {
+		return nil, nil, ErrEmailInUse
+	}
+
+	if err := s.userRepo.UpdateEmail(ctx, userID, req.Email); err != nil {
+		return nil, nil, err
+	}
+
+	user.Email = req.Email
+	claims := s.buildClaims(ctx, user)
+	tokens, err := s.jwtManager.GeneratePair(claims)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return dto.SerializeUser(user, domain.AuthMethodLocal, claims.SystemRole), tokens, nil
+}
+
+// UpdateAccountPassword validates the current password against the local
+// identity and installs a new bcrypt hash.
+func (s *AuthService) UpdateAccountPassword(ctx context.Context, userID bson.ObjectID, req dto.UpdateAccountPasswordRequest) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	identities, err := s.identityRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	var localIdentity *domain.Identity
+	for i := range identities {
+		if identities[i].AuthMethod == domain.AuthMethodLocal {
+			localIdentity = &identities[i]
+			break
+		}
+	}
+	if localIdentity == nil {
+		return ErrCannotEditOAuth
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(localIdentity.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		return ErrInvalidPassword
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.identityRepo.UpdatePassword(ctx, userID, string(hash))
+}
+
+func hasLocalIdentity(identities []domain.Identity) bool {
+	for i := range identities {
+		if identities[i].AuthMethod == domain.AuthMethodLocal {
+			return true
+		}
+	}
+	return false
+}

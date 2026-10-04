@@ -1,0 +1,307 @@
+@import "tailwindcss";
+
+@theme {
+  /* Typography — Vault / Mission Control */
+  --font-sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Coal — warm charcoal scale */
+  --color-coal-950: #0c0a08;
+  --color-coal-900: #131009;
+  --color-coal-850: #19150f;
+  --color-coal-800: #201b13;
+  --color-coal-700: #2a241a;
+  --color-coal-600: #382f23;
+  --color-coal-500: #4a3f2d;
+
+  /* Brass — the signature accent */
+  --color-brass-100: #f8ecd0;
+  --color-brass-200: #f3e2ac;
+  --color-brass-300: #ead27f;
+  --color-brass-400: #dcb955;
+  --color-brass-500: #c9a227;
+  --color-brass-600: #a2821f;
+  --color-brass-700: #6e5a15;
+
+  /* Ivory & sand — warm neutrals for text */
+  --color-ivory: #f0e9da;
+  --color-sand-200: #ddd3bc;
+  --color-sand-300: #cfc2a8;
+  --color-sand-400: #b2a58b;
+  --color-sand-500: #8a7e68;
+  --color-sand-600: #6b6150;
+
+  /* Vermillion — alarm / destructive */
+  --color-vermillion-300: #e9a08f;
+  --color-vermillion-400: #da6e55;
+  --color-vermillion-500: #c14b38;
+  --color-vermillion-600: #9c3a2a;
+
+  /* Patina — success / verified */
+  --color-patina-300: #8cc9a6;
+  --color-patina-400: #63ae85;
+  --color-patina-500: #3e8f66;
+  --color-patina-600: #2f6f4f;
+
+  /* Motion */
+  --animate-lk-spin: lk-spin 48s linear infinite;
+  --animate-lk-spin-slow: lk-spin 90s linear infinite;
+  --animate-lk-pulse: lk-pulse 2.4s ease-in-out infinite;
+  --animate-lk-lamp: lk-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes lk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #0c0a08;
+  color: #f0e9da;
+}
+
+/* ─── Ambient backgrounds ───────────────────────────────────────
+   A warm brass glow from above + a faint blueprint grid so every
+   screen reads as "inside the vault room". */
+.lk-ambient {
+  position: relative;
+  background:
+    radial-gradient(1100px 480px at 50% -220px, rgba(201, 162, 39, 0.14), transparent 70%),
+    radial-gradient(900px 420px at 88% 108%, rgba(201, 162, 39, 0.07), transparent 65%),
+    linear-gradient(180deg, #0f0c09 0%, #0c0a08 55%, #0a0908 100%);
+}
+
+.lk-ambient::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(201, 162, 39, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 162, 39, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 38%);
+}
+
+/* ─── Plates & panels ───────────────────────────────────────────
+   A "brass-plate" card: 1px warm edge, candle-light gradient,
+   a notch cut from the top-left corner. */
+.plate {
+  position: relative;
+  border: 1px solid rgba(201, 162, 39, 0.22);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(234, 210, 127, 0.05), transparent 42%),
+    linear-gradient(180deg, #1a1610, #141109);
+  box-shadow:
+    inset 0 1px 0 rgba(243, 226, 172, 0.05),
+    0 18px 40px -28px rgba(0, 0, 0, 0.95);
+}
+
+.plate::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: -1px;
+  width: 28px;
+  height: 1px;
+  transform: rotate(-45deg);
+  transform-origin: bottom left;
+  background: rgba(234, 210, 127, 0.35);
+}
+
+.plate--dim {
+  border-color: rgba(201, 162, 39, 0.12);
+  background: linear-gradient(180deg, #16130d, #120f0b);
+}
+
+/* ─── Wells (inset input areas) ─────────────────────────────── */
+.well {
+  border: 1px solid rgba(201, 162, 39, 0.16);
+  background: #0f0c09;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+/* ─── Inputs ─────────────────────────────────────────────────── */
+.lk-input {
+  width: 100%;
+  border: 1px solid rgba(201, 162, 39, 0.22);
+  background: #0f0c09;
+  color: #f0e9da;
+  border-radius: 8px;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.lk-input::placeholder {
+  color: #6b6150;
+}
+.lk-input:focus {
+  outline: none;
+  border-color: rgba(220, 185, 85, 0.8);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.18);
+}
+
+.lk-input--well {
+  border-color: rgba(201, 162, 39, 0.14);
+  background: #0d0b08;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────── */
+.lk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+  padding: 0.5rem 1.125rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+.lk-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.lk-btn:active {
+  transform: translateY(1px);
+}
+
+.lk-btn--primary {
+  color: #14100a;
+  background:
+    linear-gradient(180deg, #ead27f, #c9a227);
+  border: 1px solid rgba(234, 210, 127, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 224, 0.55),
+    0 8px 22px -12px rgba(201, 162, 39, 0.65);
+}
+.lk-btn--primary:hover {
+  background: linear-gradient(180deg, #f3e2ac, #dcb955);
+}
+
+.lk-btn--ghost {
+  color: #b2a58b;
+  background: transparent;
+  border: 1px solid rgba(201, 162, 39, 0.3);
+}
+.lk-btn--ghost:hover {
+  color: #f0e9da;
+  border-color: rgba(201, 162, 39, 0.6);
+  background: rgba(201, 162, 39, 0.06);
+}
+
+.lk-btn--danger {
+  color: #f3d4cc;
+  background:
+    linear-gradient(180deg, #c14b38, #9c3a2a);
+  border: 1px solid rgba(233, 160, 143, 0.4);
+}
+.lk-btn--danger:hover {
+  background: linear-gradient(180deg, #da6e55, #c14b38);
+}
+
+.lk-btn--danger-ghost {
+  color: #e2957f;
+  background: transparent;
+  border: 1px solid rgba(193, 75, 56, 0.35);
+}
+.lk-btn--danger-ghost:hover {
+  color: #f3d4cc;
+  border-color: rgba(193, 75, 56, 0.7);
+  background: rgba(193, 75, 56, 0.08);
+}
+
+.lk-btn--brass-text {
+  color: #dcb955;
+  background: transparent;
+  border: 1px solid rgba(201, 162, 39, 0.35);
+}
+.lk-btn--brass-text:hover {
+  color: #14100a;
+  background: linear-gradient(180deg, #ead27f, #c9a227);
+  border-color: rgba(234, 210, 127, 0.55);
+}
+
+/* ─── Brass gradient display text ───────────────────────────── */
+.text-brass-sheen {
+  background: linear-gradient(100deg, #f3e2ac 8%, #c9a227 42%, #f8ecd0 60%, #a2821f 88%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ─── Engraved rule with a diamond ──────────────────────────── */
+.engraved {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(201, 162, 39, 0.55);
+}
+.engraved::before,
+.engraved::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.4), transparent);
+}
+.engraved .diamond {
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: currentColor;
+  opacity: 0.8;
+}
+
+/* ─── Custom scrollbar ──────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: #0c0a08;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a241a;
+  border-radius: 5px;
+  border: 2px solid #0c0a08;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a3f2d;
+}
+
+/* ─── Selection & focus ─────────────────────────────────────── */
+::selection {
+  background-color: rgba(201, 162, 39, 0.35);
+  color: #f8ecd0;
+}
+*:focus-visible {
+  outline: 2px solid rgba(220, 185, 85, 0.9);
+  outline-offset: 2px;
+}
