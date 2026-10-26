@@ -6,7 +6,12 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "~/types";
-import { ACCESS_TOKEN_KEY, clearSession, getSessionItem, setAccessToken } from "~/utils/sessionStorage";
+import {
+  ACCESS_TOKEN_KEY,
+  clearSession,
+  getSessionItem,
+  setAccessToken,
+} from "~/utils/sessionStorage";
 
 interface AuthContextValue {
   user: User | null;
@@ -43,7 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: user !== null, login, logout, getAccessToken }}
+      value={{
+        user,
+        isAuthenticated: user !== null,
+        login,
+        logout,
+        getAccessToken,
+      }}
     >
       {children}
     </AuthContext.Provider>

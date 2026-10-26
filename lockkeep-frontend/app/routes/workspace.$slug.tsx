@@ -281,7 +281,9 @@ export default function WorkspaceDetail() {
           <Nameplate>Overview</Nameplate>
           <div className="mt-4">
             <DetailRow label="Slug">{workspace.slug}</DetailRow>
-            <DetailRow label="Owner">{workspace.ownerId.slice(0, 10)}</DetailRow>
+            <DetailRow label="Owner">
+              {workspace.ownerId.slice(0, 10)}
+            </DetailRow>
             <DetailRow label="2FA">
               {workspace.settings.require2FA ? "Enforced" : "Optional"}
             </DetailRow>

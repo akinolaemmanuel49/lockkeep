@@ -1,4 +1,7 @@
-import { strengthColors, strengthLabels } from "~/utils/calculatePasswordStrength";
+import {
+  strengthColors,
+  strengthLabels,
+} from "~/utils/calculatePasswordStrength";
 
 export default function PasswordStrength({
   password,

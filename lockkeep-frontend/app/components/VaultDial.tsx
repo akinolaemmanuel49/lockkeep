@@ -69,7 +69,9 @@ export default function VaultDial({
               y1={y1}
               x2={x2}
               y2={y2}
-              stroke={major ? "rgba(234,210,127,0.75)" : "rgba(201,162,39,0.35)"}
+              stroke={
+                major ? "rgba(234,210,127,0.75)" : "rgba(201,162,39,0.35)"
+              }
               strokeWidth={major ? 1.5 : 0.8}
             />
           );
@@ -94,11 +96,7 @@ export default function VaultDial({
       />
 
       {/* Fixed pointer notch at 12 o'clock */}
-      <path
-        d="M58 21.5h4l1.6-7h-7.2z"
-        fill="#dcb955"
-        opacity="0.9"
-      />
+      <path d="M58 21.5h4l1.6-7h-7.2z" fill="#dcb955" opacity="0.9" />
 
       {/* Engraved center readout */}
       {pointer && (
