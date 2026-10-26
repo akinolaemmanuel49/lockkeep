@@ -7,6 +7,7 @@ import (
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/crypto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/ports"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/utils"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -164,7 +165,7 @@ func (s *EnvSecretService) UpsertSecret(ctx context.Context, actor, orgID, envID
 	return s.toDTO(record).WithValue(secret.Value), nil
 }
 
-func (s *EnvSecretService) ListSecrets(ctx context.Context, actor, envID bson.ObjectID) ([]dto.EnvSecretDTO, error) {
+func (s *EnvSecretService) ListSecretsPaginated(ctx context.Context, actor, envID bson.ObjectID, pq dto.PaginationQuery) (*dto.EnvSecretListResponse, error) {
 	env, err := s.envRepo.FindByID(ctx, envID)
 	if err != nil {
 		return nil, err
@@ -184,20 +185,67 @@ func (s *EnvSecretService) ListSecrets(ctx context.Context, actor, envID bson.Ob
 		return nil, err
 	}
 
-	secrets, err := s.secretRepo.FindByEnvironment(ctx, envID)
+	if pq.All || pq.Limit <= 0 && pq.Page <= 0 {
+		secrets, err := s.secretRepo.FindByEnvironmentAll(ctx, envID)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]dto.EnvSecretDTO, 0, len(secrets))
+		for i := range secrets {
+			plaintext, err := crypto.Open(dek, secrets[i].EncryptedData, secrets[i].Nonce, crypto.EnvSecretAAD(envID, secrets[i].Key, secrets[i].Version))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, *s.toDTO(&secrets[i]).WithValue(string(plaintext)))
+		}
+		return &dto.EnvSecretListResponse{Secrets: out}, nil
+	}
+
+	page := pq.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := pq.Limit
+	if limit < 1 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := (page - 1) * limit
+
+	res, err := s.secretRepo.FindByEnvironment(ctx, envID, mongo.Page{Limit: limit, Offset: offset})
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]dto.EnvSecretDTO, 0, len(secrets))
-	for i := range secrets {
-		plaintext, err := crypto.Open(dek, secrets[i].EncryptedData, secrets[i].Nonce, crypto.EnvSecretAAD(envID, secrets[i].Key, secrets[i].Version))
+	out := make([]dto.EnvSecretDTO, 0, len(res.Data))
+	for i := range res.Data {
+		plaintext, err := crypto.Open(dek, res.Data[i].EncryptedData, res.Data[i].Nonce, crypto.EnvSecretAAD(envID, res.Data[i].Key, res.Data[i].Version))
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, *s.toDTO(&secrets[i]).WithValue(string(plaintext)))
+		out = append(out, *s.toDTO(&res.Data[i]).WithValue(string(plaintext)))
 	}
-	return out, nil
+
+	totalPages := int(res.TotalCount) / limit
+	if int(res.TotalCount)%limit != 0 {
+		totalPages++
+	}
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &dto.EnvSecretListResponse{
+		Secrets: out,
+		Meta: &dto.PaginationMeta{
+			Page:       page,
+			Limit:      limit,
+			TotalCount: res.TotalCount,
+			TotalPages: totalPages,
+			HasMore:    res.HasMore,
+		},
+	}, nil
 }
 
 func (s *EnvSecretService) GetSecret(ctx context.Context, actor, envID bson.ObjectID, key string) (*dto.EnvSecretDTO, error) {
@@ -287,7 +335,7 @@ func (s *EnvSecretService) ExportEnvelope(ctx context.Context, actorID, envID bs
 		return nil, err
 	}
 
-	secrets, err := s.secretRepo.FindByEnvironment(ctx, envID)
+	secrets, err := s.secretRepo.FindByEnvironmentAll(ctx, envID)
 	if err != nil {
 		return nil, err
 	}
@@ -321,6 +369,14 @@ func (s *EnvSecretService) ExportEnvelope(ctx context.Context, actorID, envID bs
 
 	s.logAudit(ctx, actorID, env.OrganizationID, envID, domain.AuditActionExport, true)
 	return envelope, nil
+}
+
+func (s *EnvSecretService) ListSecrets(ctx context.Context, actor, envID bson.ObjectID) ([]dto.EnvSecretDTO, error) {
+	resp, err := s.ListSecretsPaginated(ctx, actor, envID, dto.PaginationQuery{All: true})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Secrets, nil
 }
 
 func (s *EnvSecretService) toDTO(secret *domain.EnvSecret) *dto.EnvSecretDTO {

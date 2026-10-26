@@ -119,17 +119,49 @@ export async function deleteEnvironment(
 
 // ─── Secrets ─────────────────────────────────────────────────────
 
+export interface SecretsPaginationMeta {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export interface SecretsListResponse {
+  secrets: WorkspaceEnvSecret[];
+  meta?: SecretsPaginationMeta;
+}
+
 export async function fetchSecrets(
   orgSlug: string,
   appSlug: string,
   envSlug: string,
-): Promise<WorkspaceEnvSecret[]> {
-  const res = await authFetch(`${envBase(orgSlug, appSlug, envSlug)}/secrets`, {
-    method: "GET",
-  });
+  options: { page?: number; limit?: number; all?: boolean } = {},
+): Promise<SecretsListResponse> {
+  const params = new URLSearchParams();
+  if (options.all) {
+    params.set("all", "true");
+  } else if (options.page !== undefined || options.limit !== undefined) {
+    if (options.page !== undefined) params.set("page", String(options.page));
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+  }
+  const query = params.toString();
+  const res = await authFetch(
+    `${envBase(orgSlug, appSlug, envSlug)}/secrets${query ? `?${query}` : ""}`,
+    { method: "GET" },
+  );
   if (!res.ok) throw await asError(res, "Failed to fetch secrets");
   const data = await res.json();
-  return data.secrets ?? [];
+  return { secrets: data.secrets ?? [], meta: data.meta };
+}
+
+export async function fetchAllSecrets(
+  orgSlug: string,
+  appSlug: string,
+  envSlug: string,
+): Promise<WorkspaceEnvSecret[]> {
+  const res = await fetchSecrets(orgSlug, appSlug, envSlug, { all: true });
+  return res.secrets;
 }
 
 export async function createSecret(

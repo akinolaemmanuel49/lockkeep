@@ -65,13 +65,25 @@ func (h *EnvSecretHandler) List(c *gin.Context) {
 		return
 	}
 
-	secrets, err := h.secretService.ListSecrets(c.Request.Context(), objUserID, envID)
+	var pq dto.PaginationQuery
+	_ = c.ShouldBindQuery(&pq)
+	// backward compatible: if no pagination params, return all (default behavior)
+	if pq.Page == 0 && pq.Limit == 0 && !pq.All {
+		// default to all for backward compatibility
+		pq.All = true
+	}
+
+	resp, err := h.secretService.ListSecretsPaginated(c.Request.Context(), objUserID, envID, pq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"secrets": secrets})
+	if pq.Page == 0 && pq.Limit == 0 && !pq.All {
+		c.JSON(http.StatusOK, gin.H{"secrets": resp.Secrets})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"secrets": resp.Secrets, "meta": resp.Meta})
 }
 
 func (h *EnvSecretHandler) Upsert(c *gin.Context) {

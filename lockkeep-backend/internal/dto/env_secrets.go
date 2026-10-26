@@ -45,6 +45,25 @@ type EnvSecretDTO struct {
 	UpdatedAt time.Time         `json:"updatedAt"`
 }
 
+type PaginationQuery struct {
+	Page  int `form:"page"`
+	Limit int `form:"limit"`
+	All   bool `form:"all"`
+}
+
+type PaginationMeta struct {
+	Page       int   `json:"page"`
+	Limit      int   `json:"limit"`
+	TotalCount int64 `json:"totalCount"`
+	TotalPages int   `json:"totalPages"`
+	HasMore    bool  `json:"hasMore"`
+}
+
+type EnvSecretListResponse struct {
+	Secrets []EnvSecretDTO `json:"secrets"`
+	Meta    *PaginationMeta `json:"meta,omitempty"`
+}
+
 func (s *EnvSecretDTO) WithValue(value string) *EnvSecretDTO {
 	copy := *s
 	copy.Value = value

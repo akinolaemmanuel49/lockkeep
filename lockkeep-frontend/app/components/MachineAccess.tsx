@@ -450,7 +450,9 @@ export default function MachineAccess({
           )}
 
           <div className="flex flex-col gap-2">
-            {accounts.map((account) => (
+            {accounts
+            .filter((account) => !account.disabledAt)
+            .map((account) => (
               <div
                 key={account.id}
                 className="rounded-lg border border-brass-500/15 bg-coal-950 px-3 py-2.5"

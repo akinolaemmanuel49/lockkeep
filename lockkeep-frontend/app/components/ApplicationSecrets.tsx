@@ -150,9 +150,9 @@ export default function ApplicationSecrets({
     (async () => {
       setSecretError(null);
       try {
-        const items = await fetchSecrets(orgSlug, app.slug, selectedEnv.slug);
+        const res = await fetchSecrets(orgSlug, app.slug, selectedEnv.slug, { page: 1, limit: 5 });
         if (cancelled) return;
-        setSecrets(items);
+        setSecrets(res.secrets);
       } catch (err) {
         if (!cancelled) {
           setSecretError(
