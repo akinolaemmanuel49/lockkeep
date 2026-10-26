@@ -7,7 +7,13 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { type VaultItem, type UpdateVaultItemRequest, type KDFParams, type CryptoPolicy, type VaultItemInput } from "~/types/index";
+import {
+  type VaultItem,
+  type UpdateVaultItemRequest,
+  type KDFParams,
+  type CryptoPolicy,
+  type VaultItemInput,
+} from "~/types/index";
 import {
   deriveKeys,
   encryptSecret,
@@ -48,10 +54,7 @@ interface VaultContextValue {
     oldPassword: string,
     newPassword: string,
   ) => Promise<void>;
-  updateItem: (
-    id: string,
-    updates: Partial<VaultItemInput>,
-  ) => Promise<void>;
+  updateItem: (id: string, updates: Partial<VaultItemInput>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
 }
 
@@ -68,7 +71,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const secretCache = useRef<Map<string, string>>(new Map());
   const lastUserIdRef = useRef<string | null>(null);
   const currentPolicy = useRef<CryptoPolicy>(null);
-  const currentKDFParams = useRef<Omit<KDFParams, 'salt'>>(null);
+  const currentKDFParams = useRef<Omit<KDFParams, "salt">>(null);
   const userKdf = user?.vault?.kdf;
 
   useEffect(() => {
@@ -170,23 +173,31 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       for (const item of sourceItems) {
         let plaintext = secretCache.current.get(item.id);
         if (!plaintext) {
-          plaintext = await decryptSecret({
-            ciphertext: item.secret.ciphertext,
-            iv: item.secret.iv,
-            tag: item.secret.tag,
-            version: item.secret.version!,
-          }, oldKey);
+          plaintext = await decryptSecret(
+            {
+              ciphertext: item.secret.ciphertext,
+              iv: item.secret.iv,
+              tag: item.secret.tag,
+              version: item.secret.version!,
+            },
+            oldKey,
+          );
         }
 
         const newSecret = await encryptSecret(plaintext, newKey);
-        const markForUpdate = currentPolicy.current?.version !== user?.vault?.version;
+        const markForUpdate =
+          currentPolicy.current?.version !== user?.vault?.version;
 
-        const updated = await updateVaultItem(item.id, {
-          type: item.type,
-          name: item.name,
-          metadata: item.metadata || {},
-          secret: newSecret,
-        }, markForUpdate);
+        const updated = await updateVaultItem(
+          item.id,
+          {
+            type: item.type,
+            name: item.name,
+            metadata: item.metadata || {},
+            secret: newSecret,
+          },
+          markForUpdate,
+        );
 
         updatedItems.push(updated);
         secretCache.current.set(item.id, plaintext);
@@ -218,12 +229,18 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
         const cache = new Map<string, string>();
         for (const item of result.credentials) {
-          cache.set(item.id, await decryptSecret({
-            ciphertext: item.secret.ciphertext,
-            iv: item.secret.iv,
-            tag: item.secret.tag,
-            version: item.secret.version!,
-          }, encryptionKey));
+          cache.set(
+            item.id,
+            await decryptSecret(
+              {
+                ciphertext: item.secret.ciphertext,
+                iv: item.secret.iv,
+                tag: item.secret.tag,
+                version: item.secret.version!,
+              },
+              encryptionKey,
+            ),
+          );
         }
 
         let finalItems = result.credentials;
@@ -232,7 +249,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         // KDF upgrade path: same password, new KDF params
         if (updateKdf && currentKDFParams.current) {
           const newSalt = generateSalt();
-          const newKdfParams = buildKDFParams(currentKDFParams.current as KDFParams, newSalt);
+          const newKdfParams = buildKDFParams(
+            currentKDFParams.current as KDFParams,
+            newSalt,
+          );
           const { encryptionKey: upgradedKey, verificationHash: upgradedHash } =
             await deriveKeys(password, newKdfParams);
 
@@ -275,12 +295,15 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const item = items.find((i) => i.id === itemId);
       if (!item) throw new Error("Vault item not found");
 
-      const decrypted = await decryptSecret({
-        ciphertext: item.secret.ciphertext,
-        iv: item.secret.iv,
-        tag: item.secret.tag,
-        version: item.secret.version!,
-      }, tokenRef.current!.key);
+      const decrypted = await decryptSecret(
+        {
+          ciphertext: item.secret.ciphertext,
+          iv: item.secret.iv,
+          tag: item.secret.tag,
+          version: item.secret.version!,
+        },
+        tokenRef.current!.key,
+      );
       secretCache.current.set(itemId, decrypted);
       return decrypted;
     },
@@ -346,10 +369,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   const updateItem = useCallback(
-    async (
-      id: string,
-      updates: Partial<VaultItemInput>,
-    ) => {
+    async (id: string, updates: Partial<VaultItemInput>) => {
       getAccessTokenOrThrow();
       if (checkLocked()) throw new Error("Vault locked");
 

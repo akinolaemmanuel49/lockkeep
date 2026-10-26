@@ -120,9 +120,7 @@ export default function Setup() {
         <div className="plate relative p-8">
           <div className="mb-8 text-center">
             <VaultDial size={64} className="mx-auto text-brass-400" />
-            <Nameplate className="mt-5 justify-center">
-              First Seal
-            </Nameplate>
+            <Nameplate className="mt-5 justify-center">First Seal</Nameplate>
             <h1 className="mt-3 font-display text-2xl font-semibold tracking-tight text-ivory">
               Set Your Vault Password
             </h1>
