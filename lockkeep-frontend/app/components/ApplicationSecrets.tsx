@@ -929,7 +929,7 @@ export default function ApplicationSecrets({
             {hasMore || page > 1 ? (
               <div className="mt-3 flex items-center justify-between text-xs text-sand-600">
                 <span>
-                  Showing {secrets.length} of {totalCount}
+                  Showing {((page - 1) * 5) + 1}-{Math.min(page * 5, totalCount)} of {totalCount}
                 </span>
                 <div className="flex gap-1">
                   <button
