@@ -20,7 +20,10 @@ export default function ItemTypeSelector({
       className="fixed inset-0 z-50 flex items-center justify-center bg-coal-950/85 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div className="plate w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="plate w-full max-w-lg p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mb-4 flex items-center justify-between border-b border-brass-500/15 pb-4">
           <div>
             <Nameplate>Classification</Nameplate>
@@ -33,7 +36,14 @@ export default function ItemTypeSelector({
             className="rounded-lg p-1.5 text-sand-600 transition-colors hover:text-ivory"
             aria-label="Close"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -56,7 +66,9 @@ export default function ItemTypeSelector({
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-ivory">{item.label}</span>
                 </div>
-                <p className="mt-0.5 text-sm text-sand-500">{item.description}</p>
+                <p className="mt-0.5 text-sm text-sand-500">
+                  {item.description}
+                </p>
               </div>
               <svg
                 width="16"

@@ -28,10 +28,7 @@ export default function Callback() {
         navigate(data.user.hasMasterPassword ? "/dashboard" : "/setup");
       })
       .catch((err) => {
-        addToast(
-          err instanceof Error ? err.message : "OAuth failed",
-          "error",
-        );
+        addToast(err instanceof Error ? err.message : "OAuth failed", "error");
         navigate("/login");
       });
   }, [navigate, login, addToast]);
