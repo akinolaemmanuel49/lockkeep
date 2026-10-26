@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/dto"
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/middleware"
@@ -65,11 +66,15 @@ func (h *EnvSecretHandler) List(c *gin.Context) {
 		return
 	}
 
-	var pq dto.PaginationQuery
-	_ = c.ShouldBindQuery(&pq)
-	// backward compatible: if no pagination params, return all (default behavior)
-	if pq.Page == 0 && pq.Limit == 0 && !pq.All {
-		pq.All = true
+	// manually parse query params to ensure they're bound correctly
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	all := c.Query("all") == "true"
+
+	pq := dto.PaginationQuery{
+		Page:  page,
+		Limit: limit,
+		All:   all,
 	}
 
 	resp, err := h.secretService.ListSecretsPaginated(c.Request.Context(), objUserID, envID, pq)
