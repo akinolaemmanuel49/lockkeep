@@ -95,6 +95,9 @@ export default function ApplicationSecrets({
 
   // Secrets level
   const [secrets, setSecrets] = useState<WorkspaceEnvSecret[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [isSecretFormOpen, setIsSecretFormOpen] = useState(false);
@@ -150,9 +153,11 @@ export default function ApplicationSecrets({
     (async () => {
       setSecretError(null);
       try {
-        const res = await fetchSecrets(orgSlug, app.slug, selectedEnv.slug, { page: 1, limit: 5 });
+        const res = await fetchSecrets(orgSlug, app.slug, selectedEnv.slug, { page, limit: 5 });
         if (cancelled) return;
         setSecrets(res.secrets);
+        setHasMore(res.meta?.hasMore ?? false);
+        setTotalCount(res.meta?.totalCount ?? 0);
       } catch (err) {
         if (!cancelled) {
           setSecretError(
@@ -165,7 +170,7 @@ export default function ApplicationSecrets({
     return () => {
       cancelled = true;
     };
-  }, [orgSlug, app.slug, selectedEnv]);
+  }, [orgSlug, app.slug, selectedEnv, page]);
 
   const resetSecrets = () => {
     setSecrets([]);
@@ -921,6 +926,31 @@ export default function ApplicationSecrets({
                 )}
               </div>
             )}
+            {hasMore || page > 1 ? (
+              <div className="mt-3 flex items-center justify-between text-xs text-sand-600">
+                <span>
+                  Showing {secrets.length} of {totalCount}
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="lk-btn lk-btn--ghost text-xs px-2 py-1"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={!hasMore}
+                    className="lk-btn lk-btn--ghost text-xs px-2 py-1"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
