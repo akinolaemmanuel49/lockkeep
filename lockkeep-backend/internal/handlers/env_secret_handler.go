@@ -69,7 +69,6 @@ func (h *EnvSecretHandler) List(c *gin.Context) {
 	_ = c.ShouldBindQuery(&pq)
 	// backward compatible: if no pagination params, return all (default behavior)
 	if pq.Page == 0 && pq.Limit == 0 && !pq.All {
-		// default to all for backward compatibility
 		pq.All = true
 	}
 
@@ -79,10 +78,6 @@ func (h *EnvSecretHandler) List(c *gin.Context) {
 		return
 	}
 
-	if pq.Page == 0 && pq.Limit == 0 && !pq.All {
-		c.JSON(http.StatusOK, gin.H{"secrets": resp.Secrets})
-		return
-	}
 	c.JSON(http.StatusOK, gin.H{"secrets": resp.Secrets, "meta": resp.Meta})
 }
 
