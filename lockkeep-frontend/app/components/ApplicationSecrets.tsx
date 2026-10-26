@@ -296,7 +296,7 @@ export default function ApplicationSecrets({
       });
       addToast("Secret saved", "success");
       const items = await fetchSecrets(orgSlug, app.slug, selectedEnv.slug);
-      setSecrets(items);
+      setSecrets(Array.isArray(items) ? items : (items as any).secrets ?? []);
       closeSecretForm();
     } catch (err) {
       setSecretError(
@@ -340,7 +340,8 @@ export default function ApplicationSecrets({
   const openDraftFromEnv = async (source: WorkspaceEnvironment) => {
     setBatchError(null);
     try {
-      const sourceSecrets = await fetchSecrets(orgSlug, app.slug, source.slug);
+      const sourceRes = await fetchSecrets(orgSlug, app.slug, source.slug, { all: true });
+      const sourceSecrets = Array.isArray(sourceRes) ? sourceRes : (sourceRes as any).secrets ?? [];
       const rows: DraftSecretRow[] = [];
       let skipped = 0;
       for (const s of sourceSecrets) {
@@ -442,7 +443,8 @@ export default function ApplicationSecrets({
         `Created ${draftRows.length} secret${draftRows.length === 1 ? "" : "s"} in ${selectedEnv.slug}`,
         "success",
       );
-      setSecrets(await fetchSecrets(orgSlug, app.slug, selectedEnv.slug));
+      const items = await fetchSecrets(orgSlug, app.slug, selectedEnv.slug);
+      setSecrets(Array.isArray(items) ? items : (items as any).secrets ?? []);
       closeBatch();
     } catch (err) {
       setBatchError(
