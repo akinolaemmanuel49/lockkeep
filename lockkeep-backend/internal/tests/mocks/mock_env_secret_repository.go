@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
 	"github.com/stretchr/testify/mock"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -38,7 +39,12 @@ func (m *MockEnvSecretRepository) FindByKey(ctx context.Context, environmentID b
 	return nil, args.Error(1)
 }
 
-func (m *MockEnvSecretRepository) FindByEnvironment(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error) {
+func (m *MockEnvSecretRepository) FindByEnvironment(ctx context.Context, environmentID bson.ObjectID, page mongo.Page) (mongo.Result[domain.EnvSecret], error) {
+	args := m.Called(ctx, environmentID, page)
+	return args.Get(0).(mongo.Result[domain.EnvSecret]), args.Error(1)
+}
+
+func (m *MockEnvSecretRepository) FindByEnvironmentAll(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error) {
 	args := m.Called(ctx, environmentID)
 	return args.Get(0).([]domain.EnvSecret), args.Error(1)
 }

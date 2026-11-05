@@ -15,7 +15,7 @@ const PAN_MASK = "•••• •••• •••• ••••";
 
 function formatPan(pan: string): string {
   const digits = pan.replace(/\D/g, "");
-  return digits ? digits.match(/.{1,4}/g)?.join(" ") ?? pan : pan;
+  return digits ? (digits.match(/.{1,4}/g)?.join(" ") ?? pan) : pan;
 }
 
 export default function VaultItemCard({
@@ -100,7 +100,14 @@ export default function VaultItemCard({
             className={`${iconButton}`}
             title="Edit record"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
@@ -110,7 +117,14 @@ export default function VaultItemCard({
             className={`${iconButton} hover:text-vermillion-400`}
             title="Delete record"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
@@ -138,7 +152,14 @@ export default function VaultItemCard({
                 className={`${iconButton} scale-90`}
                 title={`Copy ${row.label}`}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
@@ -154,9 +175,7 @@ export default function VaultItemCard({
           <div className="mt-1 flex items-start gap-2">
             {isMultiline ? (
               <pre className="flex-1 whitespace-pre-wrap break-words font-mono text-sm text-ivory">
-                {showSecret && secret
-                  ? secret
-                  : `${CARD_MASK}${CARD_MASK}`}
+                {showSecret && secret ? secret : `${CARD_MASK}${CARD_MASK}`}
               </pre>
             ) : (
               <code className="flex-1 truncate font-mono text-sm tracking-[0.14em] text-ivory">
@@ -176,12 +195,26 @@ export default function VaultItemCard({
                 title={showSecret ? "Hide" : "Reveal"}
               >
                 {showSecret ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
                     <line x1="1" y1="1" x2="23" y2="23" />
                   </svg>
                 ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>
@@ -193,11 +226,25 @@ export default function VaultItemCard({
                 title={`Copy ${def.secret.label}`}
               >
                 {copied ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#63ae85" strokeWidth="2">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#63ae85"
+                    strokeWidth="2"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>

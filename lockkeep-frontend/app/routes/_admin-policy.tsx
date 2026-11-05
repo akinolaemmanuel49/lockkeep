@@ -171,7 +171,11 @@ export default function AdminPolicy() {
           </div>
 
           <div className="flex items-center gap-4 pt-2">
-            <button type="submit" disabled={loading} className="lk-btn lk-btn--primary">
+            <button
+              type="submit"
+              disabled={loading}
+              className="lk-btn lk-btn--primary"
+            >
               {loading ? "Updating..." : "Update Policy"}
             </button>
           </div>

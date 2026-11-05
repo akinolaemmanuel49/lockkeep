@@ -77,6 +77,7 @@ type EnvironmentService interface {
 type EnvSecretService interface {
 	UpsertSecret(ctx context.Context, actor bson.ObjectID, orgID, environmentID bson.ObjectID, secret dto.SecretInput) (*dto.EnvSecretDTO, error)
 	ListSecrets(ctx context.Context, actor bson.ObjectID, environmentID bson.ObjectID) ([]dto.EnvSecretDTO, error)
+	ListSecretsPaginated(ctx context.Context, actor bson.ObjectID, environmentID bson.ObjectID, page dto.PaginationQuery) (*dto.EnvSecretListResponse, error)
 	GetSecret(ctx context.Context, actor bson.ObjectID, environmentID bson.ObjectID, key string) (*dto.EnvSecretDTO, error)
 	DeleteSecret(ctx context.Context, actor bson.ObjectID, orgID, environmentID bson.ObjectID, key string) error
 	ExportEnvelope(ctx context.Context, actorID bson.ObjectID, environmentID bson.ObjectID, bearerSecret []byte) (*dto.ExportEnvelope, error)

@@ -26,10 +26,10 @@ func newTestOrganizationService() (*services.OrganizationService, *mocks.MockOrg
 func TestOrganizationService_CreateOrganization(t *testing.T) {
 
 	t.Run("successful creation", func(t *testing.T) {
-		svc, orgRepo, membershipRepo := newTestOrganizationService()
+svc, orgRepo, membershipRepo := newTestOrganizationService()
 
-		userID := bson.NewObjectID()
-		name := "Test Org"
+	userID := bson.NewObjectID()
+	name := "Test Org"
 		slug := "test-org"
 
 		orgRepo.On("FindBySlug", mock.Anything, slug).Return(nil, nil)
@@ -261,13 +261,14 @@ func TestOrganizationService_UpdateOrganization(t *testing.T) {
 
 func TestOrganizationService_DeleteOrganizations(t *testing.T) {
 	t.Run("successful delete by owner", func(t *testing.T) {
-		svc, orgRepo, _ := newTestOrganizationService()
+svc, orgRepo, membershipRepo := newTestOrganizationService()
 
-		userID := bson.NewObjectID()
-		org := &domain.Organization{ID: bson.NewObjectID(), Slug: "my-org", OwnerID: userID}
+	userID := bson.NewObjectID()
+	org := &domain.Organization{ID: bson.NewObjectID(), Slug: "my-org", OwnerID: userID}
 
-		orgRepo.On("FindByID", mock.Anything, org.ID).Return(org, nil)
-		orgRepo.On("Delete", mock.Anything, org.ID).Return(nil)
+	orgRepo.On("FindByID", mock.Anything, org.ID).Return(org, nil)
+	orgRepo.On("Delete", mock.Anything, org.ID).Return(nil)
+	membershipRepo.On("FindByOrganization", mock.Anything, org.ID).Return([]domain.Membership{}, nil)
 
 		err := svc.DeleteOrganizations(context.Background(), userID, []bson.ObjectID{org.ID})
 

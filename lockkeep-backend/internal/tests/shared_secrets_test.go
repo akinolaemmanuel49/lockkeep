@@ -246,7 +246,7 @@ func TestEnvSecretService_ExportEnvelope_ClientRoundTrip(t *testing.T) {
 		{Key: "note", Kind: domain.SecretKindNote, Version: 2, EnvironmentID: envID, OrganizationID: orgID},
 	}
 	for i := range secrets {
-		ct, nonce, err := crypto.Seal(dek, []byte(fmt.Sprintf("plaintext-%d", i)), crypto.EnvSecretAAD(envID, secrets[i].Key, secrets[i].Version))
+		ct, nonce, err := crypto.Seal(dek, fmt.Appendf(nil, "plaintext-%d", i), crypto.EnvSecretAAD(envID, secrets[i].Key, secrets[i].Version))
 		assert.NoError(t, err)
 		secrets[i].EncryptedData = ct
 		secrets[i].Nonce = nonce
@@ -275,7 +275,7 @@ func TestEnvSecretService_ExportEnvelope_ClientRoundTrip(t *testing.T) {
 	assert.Equal(t, dek, clientDEK)
 
 	for i, s := range envelope.Secrets {
-		aad := []byte(fmt.Sprintf("%s|%s|%d", envID.Hex(), s.Key, s.Version))
+		aad := fmt.Appendf(nil, "%s|%s|%d", envID.Hex(), s.Key, s.Version)
 		plaintext, err := crypto.Open(clientDEK, s.Ciphertext, s.Nonce, aad)
 		assert.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf("plaintext-%d", i), string(plaintext))

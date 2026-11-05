@@ -53,11 +53,22 @@ func (r *envSecretRepository) FindByKey(ctx context.Context, environmentID bson.
 	return &secret, nil
 }
 
-func (r *envSecretRepository) FindByEnvironment(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error) {
+func (r *envSecretRepository) FindByEnvironment(ctx context.Context, environmentID bson.ObjectID, page mongo.Page) (mongo.Result[domain.EnvSecret], error) {
+	if page.Limit <= 0 {
+		page.Limit = 500
+	}
+	return r.coll.FindMany(ctx,
+		mongo.Query{Filter: map[string]any{"environment_id": environmentID}},
+		[]mongo.SortField{{Field: "key", Order: mongo.Ascending}},
+		page,
+	)
+}
+
+func (r *envSecretRepository) FindByEnvironmentAll(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error) {
 	result, err := r.coll.FindMany(ctx,
 		mongo.Query{Filter: map[string]any{"environment_id": environmentID}},
 		[]mongo.SortField{{Field: "key", Order: mongo.Ascending}},
-		mongo.Page{Limit: 500},
+		mongo.Page{Limit: 0},
 	)
 	if err != nil {
 		return nil, err

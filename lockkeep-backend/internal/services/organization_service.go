@@ -13,13 +13,18 @@ import (
 type OrganizationService struct {
 	orgRepo        ports.OrganizationRepository
 	membershipRepo ports.MembershipRepository
+	teamRepo       ports.TeamRepository
 }
 
-func NewOrganizationService(orgRepo ports.OrganizationRepository, membershipRepo ports.MembershipRepository) *OrganizationService {
-	return &OrganizationService{
+func NewOrganizationService(orgRepo ports.OrganizationRepository, membershipRepo ports.MembershipRepository, teamRepo ...ports.TeamRepository) *OrganizationService {
+	svc := &OrganizationService{
 		orgRepo:        orgRepo,
 		membershipRepo: membershipRepo,
 	}
+	if len(teamRepo) > 0 {
+		svc.teamRepo = teamRepo[0]
+	}
+	return svc
 }
 
 func (s *OrganizationService) CreateOrganization(ctx context.Context, userID bson.ObjectID, name, slug string) (*domain.Organization, error) {
@@ -59,7 +64,8 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, userID bso
 	}
 
 	if err := s.membershipRepo.Create(ctx, membership); err != nil {
-		// TODO: rollback org creation
+		// Roll back org creation
+		_ = s.orgRepo.Delete(ctx, org.ID)
 		return nil, err
 	}
 
@@ -146,7 +152,17 @@ func (s *OrganizationService) DeleteOrganizations(ctx context.Context, userID bs
 			return ErrNotOrgOwner
 		}
 
-		// TODO: cascade delete memberships, teams, shared secrets
+		// Cascade delete teams, memberships, and shared secrets
+		if s.teamRepo != nil {
+			teams, _ := s.teamRepo.FindByOrganization(ctx, org.ID)
+			for _, t := range teams {
+				_ = s.teamRepo.Delete(ctx, t.ID)
+			}
+		}
+		memberships, _ := s.membershipRepo.FindByOrganization(ctx, org.ID)
+		for _, m := range memberships {
+			_ = s.membershipRepo.Delete(ctx, m.UserID, m.OrganizationID)
+		}
 
 		if err := s.orgRepo.Delete(ctx, org.ID); err != nil {
 			return err

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/akinolaemmanuel49/lockkeep-backend/internal/domain"
+	"github.com/akinolaemmanuel49/lockkeep-backend/internal/infrastructure/persistence/mongo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -129,7 +130,8 @@ type EnvSecretRepository interface {
 	Create(ctx context.Context, secret *domain.EnvSecret) error
 	FindByID(ctx context.Context, id bson.ObjectID) (*domain.EnvSecret, error)
 	FindByKey(ctx context.Context, environmentID bson.ObjectID, key string) (*domain.EnvSecret, error)
-	FindByEnvironment(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error)
+	FindByEnvironment(ctx context.Context, environmentID bson.ObjectID, page mongo.Page) (mongo.Result[domain.EnvSecret], error)
+	FindByEnvironmentAll(ctx context.Context, environmentID bson.ObjectID) ([]domain.EnvSecret, error)
 	Update(ctx context.Context, id bson.ObjectID, update domain.EnvSecret) error
 	Delete(ctx context.Context, id bson.ObjectID) error
 }

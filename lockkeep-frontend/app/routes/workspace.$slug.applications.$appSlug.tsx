@@ -66,7 +66,10 @@ export default function ApplicationDetail() {
             {loadError ?? "Application not found"}
           </p>
           {slug && (
-            <Link to={`/workspaces/${slug}`} className="lk-btn lk-btn--ghost mt-6">
+            <Link
+              to={`/workspaces/${slug}`}
+              className="lk-btn lk-btn--ghost mt-6"
+            >
               ← Back to Workspace
             </Link>
           )}

@@ -86,7 +86,7 @@ func main() {
 	// Services
 	authService := services.NewAuthService(cfg, userRepo, identityRepo, membershipRepo, uow, jwtManager)
 	userService := services.NewUserService(cfg, userRepo)
-	orgService := services.NewOrganizationService(orgRepo, membershipRepo)
+	orgService := services.NewOrganizationService(orgRepo, membershipRepo, teamRepo)
 	teamService := services.NewTeamService(teamRepo, membershipRepo)
 	vaultService := services.NewVaultService(cfg, vaultRepo, userRepo)
 	vaultItemService := services.NewVaultItemService(vaultItemRepo)

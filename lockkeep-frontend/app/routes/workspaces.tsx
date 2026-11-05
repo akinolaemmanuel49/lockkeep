@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { requireAuth } from "~/lib/auth-guard";
 import type { Route } from "./+types/workspaces";
-import {
-  createWorkspace,
-  fetchWorkspaces,
-} from "~/lib/api/workspaces";
+import { createWorkspace, fetchWorkspaces } from "~/lib/api/workspaces";
 import type { Workspace } from "~/types";
 import { useToast } from "~/providers/toast";
 import Nameplate from "~/components/Nameplate";
@@ -18,7 +15,11 @@ export const clientLoader = () => {
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Workspaces — LockKeep" },
-    { name: "description", content: "Manage your LockKeep workspaces: shared spaces for teams, environments, and secrets." },
+    {
+      name: "description",
+      content:
+        "Manage your LockKeep workspaces: shared spaces for teams, environments, and secrets.",
+    },
     { name: "robots", content: "noindex, nofollow" },
   ];
 }
@@ -86,7 +87,10 @@ export default function Workspaces() {
 
     setIsCreating(true);
     try {
-      const ws = await createWorkspace({ name: name.trim(), slug: slugify(slug) });
+      const ws = await createWorkspace({
+        name: name.trim(),
+        slug: slugify(slug),
+      });
       addToast("Workspace established", "success");
       navigate(`/workspaces/${ws.slug}`);
     } catch (err) {

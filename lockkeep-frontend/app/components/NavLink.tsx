@@ -19,9 +19,7 @@ export default function NavLink({
     <Link
       to={to}
       className={`group inline-flex items-center rounded-md px-3 py-2 text-[0.8125rem] font-medium uppercase tracking-[0.1em] transition-colors ${
-        isActive
-          ? "text-brass-300"
-          : "text-sand-400 hover:text-ivory"
+        isActive ? "text-brass-300" : "text-sand-400 hover:text-ivory"
       }`}
     >
       <span

@@ -1,5 +1,3 @@
-// internal/infrastructure/persistence/mongo/collection.impl.go
-
 package mongo
 
 import (

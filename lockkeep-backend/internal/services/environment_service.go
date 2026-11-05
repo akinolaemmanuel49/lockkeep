@@ -295,7 +295,7 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, userID, orgI
 }
 
 func (s *EnvironmentService) deleteEnvironmentData(ctx context.Context, envID bson.ObjectID) error {
-	secrets, err := s.secretRepo.FindByEnvironment(ctx, envID)
+	secrets, err := s.secretRepo.FindByEnvironmentAll(ctx, envID)
 	if err != nil {
 		return err
 	}

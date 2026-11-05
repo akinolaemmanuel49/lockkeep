@@ -48,8 +48,7 @@ export default function Settings() {
   const [currentVaultPassword, setCurrentVaultPassword] = useState("");
   const [newVaultPassword, setNewVaultPassword] = useState("");
   const [confirmVaultPassword, setConfirmVaultPassword] = useState("");
-  const [isChangingVaultPassword, setIsChangingVaultPassword] =
-    useState(false);
+  const [isChangingVaultPassword, setIsChangingVaultPassword] = useState(false);
   const [masterPasswordStrength, setVaultPasswordStrength] = useState(0);
 
   const navigate = useNavigate();
@@ -216,7 +215,9 @@ export default function Settings() {
                 Change Account Password
               </h3>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-sand-600">Current Password</label>
+                <label className="text-xs text-sand-600">
+                  Current Password
+                </label>
                 <input
                   type="password"
                   value={currentAccountPassword}

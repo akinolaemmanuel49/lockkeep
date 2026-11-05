@@ -111,7 +111,10 @@ export default function Dashboard() {
         addToast(editingItem ? "Record updated" : "Record saved", "success");
         closeItemModal();
       } catch (err) {
-        addToast(err instanceof Error ? err.message : "Failed to save", "error");
+        addToast(
+          err instanceof Error ? err.message : "Failed to save",
+          "error",
+        );
       }
     }
   };
@@ -188,7 +191,10 @@ export default function Dashboard() {
       await deleteItem(deleteConfirmId);
       addToast("Item deleted", "success");
     } catch (err) {
-      addToast(err instanceof Error ? err.message : "Failed to delete", "error");
+      addToast(
+        err instanceof Error ? err.message : "Failed to delete",
+        "error",
+      );
     } finally {
       setDeleteConfirmId(null);
     }
@@ -272,7 +278,14 @@ export default function Dashboard() {
               className="absolute right-3 top-1/2 -translate-y-1/2 text-sand-600 hover:text-sand-300"
               aria-label="Clear search"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -280,7 +293,10 @@ export default function Dashboard() {
           )}
         </div>
 
-        <button onClick={handleAddClick} className="lk-btn lk-btn--primary px-5 py-2.5">
+        <button
+          onClick={handleAddClick}
+          className="lk-btn lk-btn--primary px-5 py-2.5"
+        >
           <svg
             width="16"
             height="16"
@@ -321,7 +337,9 @@ export default function Dashboard() {
             <VaultItemCard
               key={item.id}
               item={item}
-              onRevealSecret={(onReveal) => handleRevealSecret(item.id, onReveal)}
+              onRevealSecret={(onReveal) =>
+                handleRevealSecret(item.id, onReveal)
+              }
               onCopySecret={() => handleCopySecret(item.id)}
               onEdit={handleEdit}
               onDelete={handleDelete}

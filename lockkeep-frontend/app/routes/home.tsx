@@ -60,7 +60,10 @@ export default function Home() {
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4 md:justify-start">
-          <Link to="/signup" className="lk-btn lk-btn--primary px-7 py-3 text-sm">
+          <Link
+            to="/signup"
+            className="lk-btn lk-btn--primary px-7 py-3 text-sm"
+          >
             Open Your Vault
           </Link>
           <Link to="/login" className="lk-btn lk-btn--ghost px-7 py-3 text-sm">
